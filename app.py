@@ -9,7 +9,7 @@ import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 from streamlit_autorefresh import st_autorefresh
-import time, os, random
+import os
 from pipeline import (
     load_data, compute_kpis, compute_time_series,
     compute_agent_stats, generate_live_order
@@ -36,10 +36,6 @@ st.markdown("""
   .section-header { color: #6b7280; font-size: 11px; font-weight: 600; text-transform: uppercase;
                     letter-spacing: 0.08em; margin-bottom: 12px; padding-bottom: 8px;
                     border-bottom: 1px solid #1f2937; }
-  .kpi-green [data-testid="stMetricValue"] { color: #10b981 !important; }
-  .kpi-red [data-testid="stMetricValue"] { color: #f43f5e !important; }
-  .kpi-amber [data-testid="stMetricValue"] { color: #f59e0b !important; }
-  .kpi-blue [data-testid="stMetricValue"] { color: #38bdf8 !important; }
   .stTabs [data-baseweb="tab-list"] { gap: 8px; background: #111827; border-radius: 12px; padding: 4px; }
   .stTabs [data-baseweb="tab"] { border-radius: 8px; color: #6b7280 !important; font-size: 13px; padding: 8px 16px; }
   .stTabs [aria-selected="true"] { background: #1f2937 !important; color: white !important; }
@@ -58,7 +54,6 @@ CHART_LAYOUT = dict(
     xaxis=dict(gridcolor='#1f2937', showgrid=True),
     yaxis=dict(gridcolor='#1f2937', showgrid=True),
 )
-# Layout without axis defs or margin (use when passing yaxis/yaxis2/margin explicitly)
 BASE_LAYOUT = dict(
     paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
     font=dict(color='#9ca3af', family='Inter'),
@@ -70,9 +65,12 @@ if 'live_orders' not in st.session_state:  st.session_state.live_orders = []
 if 'sim_running' not in st.session_state:  st.session_state.sim_running = False
 if 'live_counter' not in st.session_state: st.session_state.live_counter = 800000
 if 'live_stats' not in st.session_state:
-    st.session_state.live_stats = {'rev_prevented': 0, 'margin_saved': 0,
-                                   'int_cost': 0, 'net_profit': 0, 'count': 0,
-                                   'ai_cancelled': 0, 'recovered': 0}
+    st.session_state.live_stats = {
+        'count': 0, 'rev_prevented': 0, 'margin_saved': 0,
+        'int_cost': 0, 'net_profit': 0, 'residual_loss': 0,
+        'ai_cancelled': 0, 'recoverable': 0, 'not_recoverable': 0,
+        'recovered': 0, 'auto_recoveries': 0, 'human_recoveries': 0,
+    }
 
 # ── Auto-refresh when simulation running ───────────────────────────────────────
 if st.session_state.sim_running:
@@ -84,7 +82,6 @@ with st.sidebar:
     st.markdown("**Governance Intelligence Platform**")
     st.markdown("---")
 
-    # Data source
     st.markdown("### 📂 Data Source")
     data_source = st.radio("", ["Upload CSV", "Use bundled data"], label_visibility="collapsed")
 
@@ -96,7 +93,6 @@ with st.sidebar:
             st.session_state.df = load_data(content)
             st.success(f"✅ {len(st.session_state.df):,} orders loaded")
     else:
-        # Try to load from local path (works locally, not on Streamlit Cloud)
         local_paths = [
             r"C:\Users\sunit\ecommerce_ production_dataset_5000_rows.csv",
             "ecommerce_ production_dataset_5000_rows.csv",
@@ -128,22 +124,24 @@ with st.sidebar:
 
     if st.session_state.sim_running:
         st.markdown('<span class="live-badge"></span> **Live feed active**', unsafe_allow_html=True)
-        # Generate a new order each refresh
         st.session_state.live_counter += 1
-        new_order = generate_live_order(st.session_state.live_counter)
-        st.session_state.live_orders.insert(0, new_order)
+        o = generate_live_order(st.session_state.live_counter)
+        st.session_state.live_orders.insert(0, o)
         st.session_state.live_orders = st.session_state.live_orders[:50]
-        # Accumulate live stats
+        # Accumulate ALL live stats from explicit fields on the order dict
         ls = st.session_state.live_stats
-        ls['rev_prevented'] += new_order['_rev_prevented']
-        ls['margin_saved'] += new_order['_margin_saved']
-        ls['int_cost'] += new_order['_int_cost']
-        ls['net_profit'] += new_order['_net_profit']
-        ls['count'] += 1
-        if new_order['Tier'] != 'None':
-            ls['ai_cancelled'] += 1
-        if '🟢 Recovered' in new_order['Outcome']:
-            ls['recovered'] += 1
+        ls['count']           += 1
+        ls['rev_prevented']   += o['_rev_prevented']
+        ls['margin_saved']    += o['_margin_saved']
+        ls['int_cost']        += o['_int_cost']
+        ls['net_profit']      += o['_net_profit']
+        ls['residual_loss']   += o['_residual_loss']
+        ls['ai_cancelled']    += o['_ai_cancelled']
+        ls['recoverable']     += o['_recoverable']
+        ls['not_recoverable'] += o['_not_recoverable']
+        ls['recovered']       += o['_recovered']
+        ls['auto_recoveries'] += o['_auto_recovery']
+        ls['human_recoveries']+= o['_human_recovery']
 
     st.markdown("---")
     st.markdown("### 🇺🇸 System Info")
@@ -175,23 +173,50 @@ if df is None:
     st.stop()
 
 
-# ── Compute KPIs ───────────────────────────────────────────────────────────────
+# ── Compute static KPIs ────────────────────────────────────────────────────────
 kpis = compute_kpis(df)
-ts = compute_time_series(df)
+ts   = compute_time_series(df)
 agents_df = compute_agent_stats(df)
 ls = st.session_state.live_stats
+
+# ── Combined (Static + Live) values — used by ALL tabs ────────────────────────
+C = {}   # single combined dict
+
+C['total']          = kpis['total_orders']      + ls['count']
+C['ai_cancelled']   = kpis['ai_cancelled']       + ls['ai_cancelled']
+C['cancel_rate']    = C['ai_cancelled'] / C['total'] if C['total'] > 0 else 0
+C['recoverable']    = kpis['total_recoverable']  + ls['recoverable']
+C['not_recoverable']= kpis['not_recoverable']    + ls['not_recoverable']
+C['recovered']      = kpis['recovered']           + ls['recovered']
+C['recovery_rate_pool'] = (C['recovered'] / C['recoverable']
+                           if C['recoverable'] > 0 else 0)
+C['net_recovery_rate']  = (C['recovered'] / C['ai_cancelled']
+                           if C['ai_cancelled'] > 0 else 0)
+C['pct_recoverable']    = (C['recoverable'] / C['ai_cancelled']
+                           if C['ai_cancelled'] > 0 else 0)
+C['rev_prevented']  = kpis['revenue_prevented']  + ls['rev_prevented']
+C['margin_saved']   = kpis['margin_saved']        + ls['margin_saved']
+C['int_cost']       = kpis['intervention_cost']   + ls['int_cost']
+C['net_profit']     = kpis['net_profit']           + ls['net_profit']
+C['roi']            = C['margin_saved'] / C['int_cost'] if C['int_cost'] > 0 else kpis['roi']
+C['residual_loss']  = kpis['residual_loss']       + ls['residual_loss']
+C['auto_recoveries']= kpis['auto_recoveries']     + ls['auto_recoveries']
+C['human_recoveries']= kpis['human_recoveries']  + ls['human_recoveries']
+C['live_count']     = ls['count']
 
 # ── Header ─────────────────────────────────────────────────────────────────────
 col_h1, col_h2, col_h3 = st.columns([3, 1, 1])
 with col_h1:
     st.markdown("## 🏛️ Navedas Governance Intelligence Platform")
-    total_incl_live = kpis['total_orders'] + ls['count']
-    st.markdown(f"<p style='color:#6b7280; margin-top:-8px;'>Real-Time AI Order Governance · {total_incl_live:,} orders · US/Shopify Aligned</p>", unsafe_allow_html=True)
+    st.markdown(
+        f"<p style='color:#6b7280; margin-top:-8px;'>"
+        f"Real-Time AI Order Governance · {C['total']:,} orders · US/Shopify Aligned"
+        f"</p>", unsafe_allow_html=True)
 with col_h2:
-    st.metric("Governance ROI", f"{kpis['roi']:.1f}x", delta="vs AI-only baseline")
+    st.metric("Governance ROI", f"{C['roi']:.1f}x", delta="vs AI-only baseline")
 with col_h3:
-    live_count = len(st.session_state.live_orders)
-    st.metric("Live Orders", live_count, delta="streaming" if st.session_state.sim_running else "paused")
+    st.metric("Live Orders", len(st.session_state.live_orders),
+              delta="streaming" if st.session_state.sim_running else "paused")
 
 st.divider()
 
@@ -205,17 +230,15 @@ tab_overview, tab_governance, tab_agents, tab_live, tab_risk = st.tabs([
 # TAB 1 — OVERVIEW
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_overview:
-    # ── AI Baseline ────────────────────────────────────────────────────────────
-    st.markdown('<div class="section-header">Layer 1 — AI Baseline · Unmitigated cancellation impact</div>', unsafe_allow_html=True)
+
+    # ── Layer 1: AI Baseline ───────────────────────────────────────────────────
+    st.markdown('<div class="section-header">Layer 1 — AI Baseline · Unmitigated cancellation impact</div>',
+                unsafe_allow_html=True)
     c1, c2, c3, c4 = st.columns(4)
-    combined_total = kpis['total_orders'] + ls['count']
-    combined_cancelled = kpis['ai_cancelled'] + ls['ai_cancelled']
-    combined_cancel_rate = combined_cancelled / combined_total if combined_total > 0 else 0
-    combined_rev_prevented = kpis['revenue_prevented'] + ls['rev_prevented']
-    c1.metric("Total Orders", f"{combined_total:,}",
-              delta=f"+{ls['count']} live" if ls['count'] > 0 else None)
-    c2.metric("AI Cancel Rate", f"{combined_cancel_rate*100:.1f}%",
-              delta=f"{combined_cancelled:,} cancelled", delta_color="inverse")
+    c1.metric("Total Orders", f"{C['total']:,}",
+              delta=f"+{C['live_count']} live" if C['live_count'] > 0 else None)
+    c2.metric("AI Cancel Rate", f"{C['cancel_rate']*100:.1f}%",
+              delta=f"{C['ai_cancelled']:,} cancelled", delta_color="inverse")
     c3.metric("Revenue Lost (AI Only)", f"${kpis['revenue_lost_ai']:,.0f}",
               delta="Before governance", delta_color="inverse")
     c4.metric("Profit Lost (AI Only)", f"${kpis['profit_lost_ai']:,.0f}",
@@ -224,32 +247,29 @@ with tab_overview:
     st.divider()
 
     # ── Recoverability ─────────────────────────────────────────────────────────
-    st.markdown('<div class="section-header">Recoverability Analysis · How much can governance recover?</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-header">Recoverability Analysis · How much can governance recover?</div>',
+                unsafe_allow_html=True)
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Recoverable Orders", f"{kpis['total_recoverable']:,}",
-              delta=f"{kpis['pct_recoverable']*100:.1f}% of cancelled")
-    c2.metric("Recovery Rate (Pool)", f"{kpis['recovery_rate_pool']*100:.1f}%",
+    c1.metric("Recoverable Orders", f"{C['recoverable']:,}",
+              delta=f"{C['pct_recoverable']*100:.1f}% of cancelled")
+    c2.metric("Recovery Rate (Pool)", f"{C['recovery_rate_pool']*100:.1f}%",
               delta="Of recoverable orders")
-    c3.metric("Net Recovery Rate", f"{kpis['recovery_rate_total']*100:.1f}%",
+    c3.metric("Net Recovery Rate", f"{C['net_recovery_rate']*100:.1f}%",
               delta="Of all AI-cancelled")
-    c4.metric("Unrecoverable", f"{kpis['not_recoverable']:,}",
+    c4.metric("Unrecoverable", f"{C['not_recoverable']:,}",
               delta="Correctly left as-is", delta_color="off")
 
     st.divider()
 
     # ── Governance Impact ──────────────────────────────────────────────────────
-    st.markdown('<div class="section-header">Governance Impact · Layer 2+3 combined Navedas performance</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-header">Governance Impact · Layer 2+3 combined Navedas performance</div>',
+                unsafe_allow_html=True)
     c1, c2, c3, c4, c5 = st.columns(5)
-    comb_rev_prev = kpis['revenue_prevented'] + ls['rev_prevented']
-    comb_margin   = kpis['margin_saved'] + ls['margin_saved']
-    comb_cost     = kpis['intervention_cost'] + ls['int_cost']
-    comb_net      = kpis['net_profit'] + ls['net_profit']
-    comb_roi      = comb_margin / comb_cost if comb_cost > 0 else kpis['roi']
-    c1.metric("Revenue Prevented", f"${comb_rev_prev:,.0f}", delta="Saved from cancellation")
-    c2.metric("Margin Saved", f"${comb_margin:,.0f}", delta="Gross profit recovered")
-    c3.metric("Intervention Cost", f"${comb_cost:,.0f}", delta="Total agent spend")
-    c4.metric("Net Profit Impact", f"${comb_net:,.0f}", delta="Margin − Cost")
-    c5.metric("Governance ROI", f"{comb_roi:.1f}x", delta="Margin ÷ Cost")
+    c1.metric("Revenue Prevented", f"${C['rev_prevented']:,.0f}", delta="Saved from cancellation")
+    c2.metric("Margin Saved",      f"${C['margin_saved']:,.0f}",  delta="Gross profit recovered")
+    c3.metric("Intervention Cost", f"${C['int_cost']:,.0f}",      delta="Total agent spend")
+    c4.metric("Net Profit Impact", f"${C['net_profit']:,.0f}",    delta="Margin − Cost")
+    c5.metric("Governance ROI",    f"{C['roi']:.1f}x",            delta="Margin ÷ Cost")
 
     st.divider()
 
@@ -257,32 +277,28 @@ with tab_overview:
     col_w, col_g = st.columns([2, 1])
 
     with col_w:
-        st.markdown('<div class="section-header">Revenue Waterfall — AI Baseline vs Governance Outcome</div>', unsafe_allow_html=True)
-        baseline = kpis['revenue_lost_ai'] + (kpis['total_orders'] - kpis['ai_cancelled']) * df['total_order_value'].mean()
-        after_ai = baseline - kpis['revenue_lost_ai']
-        after_gov = after_ai + kpis['revenue_prevented']
-
+        st.markdown('<div class="section-header">Revenue Waterfall — AI Baseline vs Governance Outcome</div>',
+                    unsafe_allow_html=True)
+        baseline  = kpis['revenue_lost_ai'] + (kpis['total_orders'] - kpis['ai_cancelled']) * df['total_order_value'].mean()
+        after_ai  = baseline - kpis['revenue_lost_ai']
+        after_gov = after_ai + C['rev_prevented']
         vals = [baseline, kpis['revenue_lost_ai'], after_ai,
-                kpis['revenue_prevented'], kpis['residual_loss'], after_gov]
+                C['rev_prevented'], C['residual_loss'], after_gov]
         fig_wf = go.Figure(go.Waterfall(
-            name="Revenue",
-            orientation="v",
+            name="Revenue", orientation="v",
             measure=["absolute", "relative", "total", "relative", "relative", "total"],
             x=["Baseline", "AI Loss", "After AI Only", "Gov Recovery", "Residual Loss", "Net Revenue"],
-            y=[baseline, -kpis['revenue_lost_ai'], 0, kpis['revenue_prevented'], -kpis['residual_loss'], 0],
+            y=[baseline, -kpis['revenue_lost_ai'], 0, C['rev_prevented'], -C['residual_loss'], 0],
             connector={"line": {"color": "#374151"}},
             decreasing={"marker": {"color": "#f43f5e"}},
             increasing={"marker": {"color": "#10b981"}},
             totals={"marker": {"color": "#38bdf8"}},
             text=[f"${v/1e6:.2f}M" if abs(v) > 1e6 else f"${v:,.0f}" for v in vals],
-            textposition="inside",
-            insidetextanchor="middle",
+            textposition="inside", insidetextanchor="middle",
             textfont=dict(color="white", size=12, family="Inter"),
         ))
         fig_wf.update_layout(
-            **BASE_LAYOUT,
-            height=360,
-            showlegend=False,
+            **BASE_LAYOUT, height=360, showlegend=False,
             margin=dict(l=40, r=20, t=20, b=60),
             xaxis=dict(gridcolor='#1f2937', tickfont=dict(color='#9ca3af', size=11)),
             yaxis=dict(gridcolor='#1f2937', showgrid=True,
@@ -292,31 +308,31 @@ with tab_overview:
 
     with col_g:
         st.markdown('<div class="section-header">Governance ROI Gauge</div>', unsafe_allow_html=True)
-        roi_val = min(kpis['roi'], 200)
         fig_g = go.Figure(go.Indicator(
             mode="gauge+number+delta",
-            value=kpis['roi'],
+            value=C['roi'],
             delta={"reference": 10, "valueformat": ".1f", "suffix": "x"},
             number={"suffix": "x", "font": {"size": 32, "color": "#10b981"}},
             gauge={
                 "axis": {"range": [0, 200], "tickcolor": "#374151"},
                 "bar": {"color": "#10b981", "thickness": 0.3},
-                "bgcolor": "#111827",
-                "borderwidth": 0,
+                "bgcolor": "#111827", "borderwidth": 0,
                 "steps": [
-                    {"range": [0, 10], "color": "#1f2937"},
+                    {"range": [0,  10], "color": "#1f2937"},
                     {"range": [10, 50], "color": "#1a2e1a"},
-                    {"range": [50, 200], "color": "#0d2b1d"},
+                    {"range": [50,200], "color": "#0d2b1d"},
                 ],
                 "threshold": {"line": {"color": "#f59e0b", "width": 3}, "value": 10}
             }
         ))
-        fig_g.add_annotation(text=f"${kpis['margin_saved']:,.0f}<br><span style='font-size:10px;color:#6b7280'>Margin Saved</span>",
-                             xref="paper", yref="paper", x=0.25, y=0.1, showarrow=False,
-                             font=dict(color='#10b981', size=11), align='center')
-        fig_g.add_annotation(text=f"${kpis['intervention_cost']:,.0f}<br><span style='font-size:10px;color:#6b7280'>Int. Cost</span>",
-                             xref="paper", yref="paper", x=0.75, y=0.1, showarrow=False,
-                             font=dict(color='#f59e0b', size=11), align='center')
+        fig_g.add_annotation(
+            text=f"${C['margin_saved']:,.0f}<br><span style='font-size:10px;color:#6b7280'>Margin Saved</span>",
+            xref="paper", yref="paper", x=0.25, y=0.1, showarrow=False,
+            font=dict(color='#10b981', size=11), align='center')
+        fig_g.add_annotation(
+            text=f"${C['int_cost']:,.0f}<br><span style='font-size:10px;color:#6b7280'>Int. Cost</span>",
+            xref="paper", yref="paper", x=0.75, y=0.1, showarrow=False,
+            font=dict(color='#f59e0b', size=11), align='center')
         fig_g.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
                             height=320, margin=dict(l=20, r=20, t=30, b=10),
                             font=dict(color='#9ca3af'))
@@ -325,10 +341,10 @@ with tab_overview:
     # ── Operational ────────────────────────────────────────────────────────────
     st.markdown('<div class="section-header">Operational Metrics</div>', unsafe_allow_html=True)
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Auto Recoveries", f"{kpis['auto_recoveries']:,}", delta="Layer 2 agent")
-    c2.metric("Human Recoveries", f"{kpis['human_recoveries']:,}", delta="Layer 3 agent")
+    c1.metric("Auto Recoveries",   f"{C['auto_recoveries']:,}",  delta="Layer 2 agent")
+    c2.metric("Human Recoveries",  f"{C['human_recoveries']:,}", delta="Layer 3 agent")
     c3.metric("Avg Recovery Time", f"{kpis['avg_latency']:.1f} min")
-    c4.metric("SLA Compliance", f"{kpis['sla_compliance']*100:.1f}%",
+    c4.metric("SLA Compliance",    f"{kpis['sla_compliance']*100:.1f}%",
               delta=f"Split fulfillment: {kpis['split_rate']*100:.1f}%")
 
 
@@ -336,13 +352,14 @@ with tab_overview:
 # TAB 2 — GOVERNANCE
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_governance:
-    st.markdown('<div class="section-header">Governance Financial Intelligence · Full lifecycle analysis</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-header">Governance Financial Intelligence · Full lifecycle analysis</div>',
+                unsafe_allow_html=True)
     c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("Revenue Prevented", f"${kpis['revenue_prevented']:,.0f}")
-    c2.metric("Margin Saved", f"${kpis['margin_saved']:,.0f}")
-    c3.metric("Int. Cost", f"${kpis['intervention_cost']:,.0f}")
-    c4.metric("Net Profit", f"${kpis['net_profit']:,.0f}")
-    c5.metric("ROI", f"{kpis['roi']:.1f}x")
+    c1.metric("Revenue Prevented", f"${C['rev_prevented']:,.0f}")
+    c2.metric("Margin Saved",      f"${C['margin_saved']:,.0f}")
+    c3.metric("Int. Cost",         f"${C['int_cost']:,.0f}")
+    c4.metric("Net Profit",        f"${C['net_profit']:,.0f}")
+    c5.metric("ROI",               f"{C['roi']:.1f}x")
 
     # ROI + Margin trend
     col_t, col_m = st.columns(2)
@@ -383,9 +400,7 @@ with tab_governance:
         st.markdown('<div class="section-header">Recovery Funnel</div>', unsafe_allow_html=True)
         funnel_data = {
             'Stage': ['Total Orders', 'AI Cancelled', 'Recoverable', 'Successfully Recovered'],
-            'Count': [kpis['total_orders'], kpis['ai_cancelled'],
-                      kpis['total_recoverable'],
-                      int(kpis['total_recoverable'] * kpis['recovery_rate_pool'])],
+            'Count': [C['total'], C['ai_cancelled'], C['recoverable'], C['recovered']],
             'Color': ['#38bdf8', '#f59e0b', '#818cf8', '#10b981']
         }
         fig_funnel = go.Figure(go.Funnel(
@@ -400,11 +415,12 @@ with tab_governance:
         st.plotly_chart(fig_funnel, use_container_width=True)
 
     with col_r:
-        st.markdown('<div class="section-header">Governance Routing Engine — $75 Threshold</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-header">Governance Routing Engine — $75 Threshold</div>',
+                    unsafe_allow_html=True)
         routing_data = [
-            {"Tier": "Layer 2 — Auto (<$75)", "Action": "Full Auto Refund", "Cost": "$5", "Success": "96%", "color": "🔵"},
-            {"Tier": "Layer 2 — Auto (Medium Risk)", "Action": "Split / Partial Auto", "Cost": "$15", "Success": "85%", "color": "🔵"},
-            {"Tier": "Layer 3 — Human (High Risk)", "Action": "Human Review Queue", "Cost": "$25", "Success": "80%", "color": "🟡"},
+            {"Tier": "Layer 2 — Auto (<$75)",        "Action": "Full Auto Refund",    "Cost": "$5",  "Success": "96%", "color": "🔵"},
+            {"Tier": "Layer 2 — Auto (Medium Risk)",  "Action": "Split / Partial Auto","Cost": "$15", "Success": "85%", "color": "🔵"},
+            {"Tier": "Layer 3 — Human (High Risk)",   "Action": "Human Review Queue",  "Cost": "$25", "Success": "80%", "color": "🟡"},
         ]
         for r in routing_data:
             with st.expander(f"{r['color']} {r['Tier']}"):
@@ -413,8 +429,9 @@ with tab_governance:
                 c2.markdown(f"**Avg Cost**  \n{r['Cost']}")
                 c3.markdown(f"**Success Rate**  \n{r['Success']}")
 
-    # Net profit by reason
-    st.markdown('<div class="section-header">Net Profit Impact by Cancellation Reason</div>', unsafe_allow_html=True)
+    # Net profit by reason (static CSV — cancellation reasons don't change live)
+    st.markdown('<div class="section-header">Net Profit Impact by Cancellation Reason</div>',
+                unsafe_allow_html=True)
     by_reason = df[df['ai_cancel_flag'] == 1].groupby('cancellation_reason').agg(
         net_profit=('net_profit_impact_due_to_navedas', 'sum'),
         margin_saved=('margin_saved_after_navedas', 'sum'),
@@ -437,7 +454,7 @@ with tab_governance:
 with tab_agents:
     st.markdown('<div class="section-header">Agent Performance Leaderboard</div>', unsafe_allow_html=True)
 
-    # Leaderboard bar chart
+    # Leaderboard bar chart (static proportions, updated total counts)
     fig_lb = go.Figure()
     colors = ['#38bdf8' if t == 'Auto' else '#f59e0b' for t in agents_df['Type']]
     fig_lb.add_trace(go.Bar(
@@ -450,20 +467,22 @@ with tab_agents:
                          xaxis_title='Margin Saved ($)')
     st.plotly_chart(fig_lb, use_container_width=True)
 
-    # Leaderboard table
     display_df = agents_df.copy()
-    display_df['Margin Saved'] = display_df['Margin Saved'].apply(lambda v: f"${v:,.0f}")
-    display_df['Recoveries'] = display_df['Recoveries'].apply(lambda v: f"{v:,}")
+    display_df['Margin Saved']     = display_df['Margin Saved'].apply(lambda v: f"${v:,.0f}")
+    display_df['Recoveries']       = display_df['Recoveries'].apply(lambda v: f"{v:,}")
     display_df['Success Rate (%)'] = display_df['Success Rate (%)'].apply(lambda v: f"{v:.1f}%")
     st.dataframe(display_df, use_container_width=True, hide_index=True)
 
     st.divider()
-    st.markdown('<div class="section-header">Operational Performance</div>', unsafe_allow_html=True)
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Auto Recoveries", f"{kpis['auto_recoveries']:,}")
-    c2.metric("Human Recoveries", f"{kpis['human_recoveries']:,}")
-    c3.metric("Avg Recovery Time", f"{kpis['avg_latency']:.1f} min")
-    c4.metric("SLA Compliance", f"{kpis['sla_compliance']*100:.1f}%")
+    st.markdown('<div class="section-header">Operational Performance — Combined Static + Live</div>',
+                unsafe_allow_html=True)
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
+    c1.metric("Auto Recoveries",   f"{C['auto_recoveries']:,}",  delta="Layer 2 bots")
+    c2.metric("Human Recoveries",  f"{C['human_recoveries']:,}", delta="Layer 3 humans")
+    c3.metric("Total Recovered",   f"{C['recovered']:,}",        delta="All interventions")
+    c4.metric("Recovery Pool Rate",f"{C['recovery_rate_pool']*100:.1f}%", delta="Of recoverable")
+    c5.metric("Avg Recovery Time", f"{kpis['avg_latency']:.1f} min")
+    c6.metric("SLA Compliance",    f"{kpis['sla_compliance']*100:.1f}%")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -480,26 +499,33 @@ with tab_live:
             display_orders = []
             for o in st.session_state.live_orders[:25]:
                 display_orders.append({
-                    'Order': o['Order'], 'State': o['State'], 'Demand': o['Demand'],
-                    'Value': o['Value'], 'Margin': o['Margin'],
-                    'Reason': o['Reason'][:20], 'Tier': o['Tier'], 'Outcome': o['Outcome']
+                    'Order':   o['Order'],       'State':   o['State'],
+                    'Demand':  o['Demand'],       'Value':   o['Value'],
+                    'Margin':  o['Margin'],       'Reason':  o['Reason'][:20],
+                    'Tier':    o['Tier'],         'Outcome': o['Outcome']
                 })
             st.dataframe(pd.DataFrame(display_orders), use_container_width=True, hide_index=True)
 
     with col_ls:
         st.markdown('<div class="section-header">Live Session KPIs</div>', unsafe_allow_html=True)
-        ls = st.session_state.live_stats
-        st.metric("Orders Processed", f"{ls['count']}")
-        st.metric("Revenue Prevented", f"${ls['rev_prevented']:,.0f}")
-        st.metric("Margin Saved", f"${ls['margin_saved']:,.0f}")
-        st.metric("Net Profit", f"${ls['net_profit']:,.0f}")
+        st.metric("Orders Processed",   f"{ls['count']:,}")
+        st.metric("AI Cancelled",       f"{ls['ai_cancelled']:,}",
+                  delta=f"{ls['ai_cancelled']/ls['count']*100:.1f}% rate" if ls['count'] > 0 else None,
+                  delta_color="inverse")
+        st.metric("Recoverable",        f"{ls['recoverable']:,}")
+        st.metric("Successfully Saved", f"{ls['recovered']:,}")
+        st.metric("Revenue Prevented",  f"${ls['rev_prevented']:,.0f}")
+        st.metric("Margin Saved",       f"${ls['margin_saved']:,.0f}")
+        st.metric("Net Profit",         f"${ls['net_profit']:,.0f}")
+        st.metric("Residual Loss",      f"${ls['residual_loss']:,.0f}", delta_color="inverse",
+                  delta="Failed recoveries")
         if ls['int_cost'] > 0:
             session_roi = ls['margin_saved'] / ls['int_cost']
             st.metric("Session ROI", f"{session_roi:.1f}x")
 
     st.divider()
     st.markdown('<div class="section-header">Simulation Controls</div>', unsafe_allow_html=True)
-    st.markdown("The simulation generates Shopify-format synthetic orders every **5 seconds**, routes them through the 3-layer governance engine, and updates all KPIs in real-time.")
+    st.markdown("Generates Shopify-format synthetic orders every **5 seconds**, routes through the 3-layer governance engine, and updates **all KPIs across every tab** in real-time.")
 
     c1, c2, c3 = st.columns([1, 1, 3])
     with c1:
@@ -512,9 +538,12 @@ with tab_live:
     with c3:
         if st.button("🗑 Clear History", use_container_width=True):
             st.session_state.live_orders = []
-            st.session_state.live_stats = {'rev_prevented': 0, 'margin_saved': 0,
-                                           'int_cost': 0, 'net_profit': 0, 'count': 0,
-                                           'ai_cancelled': 0, 'recovered': 0}
+            st.session_state.live_stats = {
+                'count': 0, 'rev_prevented': 0, 'margin_saved': 0,
+                'int_cost': 0, 'net_profit': 0, 'residual_loss': 0,
+                'ai_cancelled': 0, 'recoverable': 0, 'not_recoverable': 0,
+                'recovered': 0, 'auto_recoveries': 0, 'human_recoveries': 0,
+            }
             st.rerun()
 
 
@@ -523,11 +552,15 @@ with tab_live:
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_risk:
     st.markdown('<div class="section-header">Residual Risk Analysis</div>', unsafe_allow_html=True)
-    c1, c2 = st.columns(2)
-    c1.metric("Residual Recoverable Loss", f"${kpis['residual_loss']:,.0f}",
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Residual Recoverable Loss", f"${C['residual_loss']:,.0f}",
               delta="Revenue still at risk after governance", delta_color="inverse")
-    c2.metric("Legitimate Non-Recoverable", f"{kpis['not_recoverable']:,}",
+    c2.metric("Legitimate Non-Recoverable", f"{C['not_recoverable']:,}",
               delta="Orders correctly left unrecovered", delta_color="off")
+    c3.metric("Successfully Recovered",    f"{C['recovered']:,}",
+              delta=f"{C['recovery_rate_pool']*100:.1f}% of recoverable pool")
+    c4.metric("Net Revenue Protected",     f"${C['rev_prevented']:,.0f}",
+              delta="Cumulative static + live")
 
     # Failure reason breakdown
     fail_df = df[
@@ -566,10 +599,8 @@ with tab_risk:
             ("Net Recovery % (Total Basis) tracked", True),
         ]
         for rule, ok in checks:
-            icon = "✅" if ok else "❌"
-            st.markdown(f"{icon} `{rule}`")
+            st.markdown(f"{'✅' if ok else '❌'} `{rule}`")
 
-    # Demand level breakdown
     st.divider()
     st.markdown('<div class="section-header">Risk by Demand Level</div>', unsafe_allow_html=True)
     demand_df = df.groupby('demand_level').agg(

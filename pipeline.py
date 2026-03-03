@@ -97,6 +97,7 @@ def compute_kpis(df: pd.DataFrame) -> dict:
         'recovery_rate_pool': recovered / recoverable if recoverable > 0 else 0,
         'recovery_rate_total': recovered / ai_cancelled if ai_cancelled > 0 else 0,
         'not_recoverable': ai_cancelled - recoverable,
+        'recovered': recovered,
         'revenue_prevented': rev_prevented, 'margin_saved': margin_saved,
         'intervention_cost': int_cost, 'net_profit': net_profit,
         'roi': margin_saved / int_cost if int_cost > 0 else 0,
@@ -177,6 +178,15 @@ def generate_live_order(counter: int) -> dict:
         'Value': f'${value:,.0f}', 'Margin': f'{margin*100:.0f}%',
         'Reason': reason, 'Tier': tier,
         'Outcome': f'{icon} {out_label}',
+        # financial accumulators
         '_rev_prevented': rev_prevented, '_margin_saved': ms,
         '_int_cost': cost, '_net_profit': ms - cost,
+        '_residual_loss': value if (recoverable and not success) else 0,
+        # count accumulators — used to update live_stats directly
+        '_ai_cancelled':    1 if ai_cancel else 0,
+        '_recoverable':     1 if recoverable else 0,
+        '_not_recoverable': 1 if (ai_cancel and not recoverable) else 0,
+        '_recovered':       1 if success else 0,
+        '_auto_recovery':   1 if (tier == 'Auto' and success) else 0,
+        '_human_recovery':  1 if (tier == 'Human' and success) else 0,
     }
