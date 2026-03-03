@@ -58,6 +58,11 @@ CHART_LAYOUT = dict(
     xaxis=dict(gridcolor='#1f2937', showgrid=True),
     yaxis=dict(gridcolor='#1f2937', showgrid=True),
 )
+# Layout without axis defs or margin (use when passing yaxis/yaxis2/margin explicitly)
+BASE_LAYOUT = dict(
+    paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+    font=dict(color='#9ca3af', family='Inter'),
+)
 
 # ── Session state init ─────────────────────────────────────────────────────────
 if 'df' not in st.session_state:           st.session_state.df = None
@@ -241,6 +246,8 @@ with tab_overview:
         after_ai = baseline - kpis['revenue_lost_ai']
         after_gov = after_ai + kpis['revenue_prevented']
 
+        vals = [baseline, kpis['revenue_lost_ai'], after_ai,
+                kpis['revenue_prevented'], kpis['residual_loss'], after_gov]
         fig_wf = go.Figure(go.Waterfall(
             name="Revenue",
             orientation="v",
@@ -251,11 +258,20 @@ with tab_overview:
             decreasing={"marker": {"color": "#f43f5e"}},
             increasing={"marker": {"color": "#10b981"}},
             totals={"marker": {"color": "#38bdf8"}},
-            text=[f"${v/1e6:.2f}M" if abs(v) > 1e6 else f"${v:,.0f}"
-                  for v in [baseline, kpis['revenue_lost_ai'], after_ai, kpis['revenue_prevented'], kpis['residual_loss'], after_gov]],
-            textposition="outside"
+            text=[f"${v/1e6:.2f}M" if abs(v) > 1e6 else f"${v:,.0f}" for v in vals],
+            textposition="inside",
+            insidetextanchor="middle",
+            textfont=dict(color="white", size=12, family="Inter"),
         ))
-        fig_wf.update_layout(**CHART_LAYOUT, height=320, showlegend=False)
+        fig_wf.update_layout(
+            **BASE_LAYOUT,
+            height=360,
+            showlegend=False,
+            margin=dict(l=40, r=20, t=20, b=60),
+            xaxis=dict(gridcolor='#1f2937', tickfont=dict(color='#9ca3af', size=11)),
+            yaxis=dict(gridcolor='#1f2937', showgrid=True,
+                       tickformat='$,.0f', tickfont=dict(color='#9ca3af')),
+        )
         st.plotly_chart(fig_wf, use_container_width=True)
 
     with col_g:
@@ -324,9 +340,10 @@ with tab_governance:
                                     yaxis='y2', mode='lines+markers',
                                     marker=dict(color='#fbbf24', size=6)))
         fig_ts.update_layout(
-            **CHART_LAYOUT, height=300,
-            yaxis=dict(title='Margin Saved ($)', gridcolor='#1f2937'),
+            **BASE_LAYOUT, height=300,
+            yaxis=dict(title='Margin Saved ($)', gridcolor='#1f2937', showgrid=True),
             yaxis2=dict(title='ROI (x)', overlaying='y', side='right', gridcolor='#1f2937'),
+            xaxis=dict(gridcolor='#1f2937', showgrid=True),
             legend=dict(x=0, y=1, bgcolor='rgba(0,0,0,0)'),
         )
         st.plotly_chart(fig_ts, use_container_width=True)
