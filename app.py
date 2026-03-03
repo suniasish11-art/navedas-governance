@@ -64,13 +64,19 @@ if 'df' not in st.session_state:           st.session_state.df = None
 if 'live_orders' not in st.session_state:  st.session_state.live_orders = []
 if 'sim_running' not in st.session_state:  st.session_state.sim_running = False
 if 'live_counter' not in st.session_state: st.session_state.live_counter = 800000
+_LIVE_DEFAULTS = {
+    'count': 0, 'rev_prevented': 0, 'margin_saved': 0,
+    'int_cost': 0, 'net_profit': 0, 'residual_loss': 0,
+    'ai_cancelled': 0, 'recoverable': 0, 'not_recoverable': 0,
+    'recovered': 0, 'auto_recoveries': 0, 'human_recoveries': 0,
+}
 if 'live_stats' not in st.session_state:
-    st.session_state.live_stats = {
-        'count': 0, 'rev_prevented': 0, 'margin_saved': 0,
-        'int_cost': 0, 'net_profit': 0, 'residual_loss': 0,
-        'ai_cancelled': 0, 'recoverable': 0, 'not_recoverable': 0,
-        'recovered': 0, 'auto_recoveries': 0, 'human_recoveries': 0,
-    }
+    st.session_state.live_stats = dict(_LIVE_DEFAULTS)
+else:
+    # Migrate old session state — add any missing keys with 0
+    for _k, _v in _LIVE_DEFAULTS.items():
+        if _k not in st.session_state.live_stats:
+            st.session_state.live_stats[_k] = _v
 
 # ── Auto-refresh when simulation running ───────────────────────────────────────
 if st.session_state.sim_running:
@@ -251,13 +257,14 @@ with tab_overview:
                 unsafe_allow_html=True)
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Recoverable Orders", f"{C['recoverable']:,}",
-              delta=f"{C['pct_recoverable']*100:.1f}% of cancelled")
+              delta=f"+{ls['recoverable']} live" if ls['recoverable'] > 0 else f"{C['pct_recoverable']*100:.1f}% of cancelled")
     c2.metric("Recovery Rate (Pool)", f"{C['recovery_rate_pool']*100:.1f}%",
-              delta="Of recoverable orders")
+              delta=f"{C['recovered']:,} saved" if ls['recovered'] > 0 else "Of recoverable orders")
     c3.metric("Net Recovery Rate", f"{C['net_recovery_rate']*100:.1f}%",
-              delta="Of all AI-cancelled")
+              delta=f"+{ls['recovered']} live saved" if ls['recovered'] > 0 else "Of all AI-cancelled")
     c4.metric("Unrecoverable", f"{C['not_recoverable']:,}",
-              delta="Correctly left as-is", delta_color="off")
+              delta=f"+{ls['not_recoverable']} live" if ls['not_recoverable'] > 0 else "Correctly left as-is",
+              delta_color="off")
 
     st.divider()
 
@@ -341,8 +348,10 @@ with tab_overview:
     # ── Operational ────────────────────────────────────────────────────────────
     st.markdown('<div class="section-header">Operational Metrics</div>', unsafe_allow_html=True)
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Auto Recoveries",   f"{C['auto_recoveries']:,}",  delta="Layer 2 agent")
-    c2.metric("Human Recoveries",  f"{C['human_recoveries']:,}", delta="Layer 3 agent")
+    c1.metric("Auto Recoveries",   f"{C['auto_recoveries']:,}",
+              delta=f"+{ls['auto_recoveries']} live" if ls['auto_recoveries'] > 0 else "Layer 2 agent")
+    c2.metric("Human Recoveries",  f"{C['human_recoveries']:,}",
+              delta=f"+{ls['human_recoveries']} live" if ls['human_recoveries'] > 0 else "Layer 3 agent")
     c3.metric("Avg Recovery Time", f"{kpis['avg_latency']:.1f} min")
     c4.metric("SLA Compliance",    f"{kpis['sla_compliance']*100:.1f}%",
               delta=f"Split fulfillment: {kpis['split_rate']*100:.1f}%")
