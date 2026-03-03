@@ -187,7 +187,7 @@ C['ai_cancelled']   = kpis['ai_cancelled']       + ls['ai_cancelled']
 C['cancel_rate']    = C['ai_cancelled'] / C['total'] if C['total'] > 0 else 0
 C['recoverable']    = kpis['total_recoverable']  + ls['recoverable']
 C['not_recoverable']= kpis['not_recoverable']    + ls['not_recoverable']
-C['recovered']      = kpis['recovered']           + ls['recovered']
+C['recovered']      = kpis.get('recovered', int(kpis['total_recoverable'] * kpis['recovery_rate_pool'])) + ls['recovered']
 C['recovery_rate_pool'] = (C['recovered'] / C['recoverable']
                            if C['recoverable'] > 0 else 0)
 C['net_recovery_rate']  = (C['recovered'] / C['ai_cancelled']
