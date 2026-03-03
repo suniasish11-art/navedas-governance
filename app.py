@@ -80,7 +80,7 @@ else:
 
 # ── Auto-refresh when simulation running ───────────────────────────────────────
 if st.session_state.sim_running:
-    st_autorefresh(interval=5000, key="live_refresh")
+    st_autorefresh(interval=2000, key="live_refresh")
 
 # ── Sidebar ────────────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -130,24 +130,25 @@ with st.sidebar:
 
     if st.session_state.sim_running:
         st.markdown('<span class="live-badge"></span> **Live feed active**', unsafe_allow_html=True)
-        st.session_state.live_counter += 1
-        o = generate_live_order(st.session_state.live_counter)
-        st.session_state.live_orders.insert(0, o)
-        st.session_state.live_orders = st.session_state.live_orders[:50]
-        # Accumulate ALL live stats from explicit fields on the order dict
         ls = st.session_state.live_stats
-        ls['count']           += 1
-        ls['rev_prevented']   += o['_rev_prevented']
-        ls['margin_saved']    += o['_margin_saved']
-        ls['int_cost']        += o['_int_cost']
-        ls['net_profit']      += o['_net_profit']
-        ls['residual_loss']   += o['_residual_loss']
-        ls['ai_cancelled']    += o['_ai_cancelled']
-        ls['recoverable']     += o['_recoverable']
-        ls['not_recoverable'] += o['_not_recoverable']
-        ls['recovered']       += o['_recovered']
-        ls['auto_recoveries'] += o['_auto_recovery']
-        ls['human_recoveries']+= o['_human_recovery']
+        # Generate 3 orders per 2-second cycle for visible real-time updates
+        for _ in range(3):
+            st.session_state.live_counter += 1
+            o = generate_live_order(st.session_state.live_counter)
+            st.session_state.live_orders.insert(0, o)
+            ls['count']           += 1
+            ls['rev_prevented']   += o['_rev_prevented']
+            ls['margin_saved']    += o['_margin_saved']
+            ls['int_cost']        += o['_int_cost']
+            ls['net_profit']      += o['_net_profit']
+            ls['residual_loss']   += o['_residual_loss']
+            ls['ai_cancelled']    += o['_ai_cancelled']
+            ls['recoverable']     += o['_recoverable']
+            ls['not_recoverable'] += o['_not_recoverable']
+            ls['recovered']       += o['_recovered']
+            ls['auto_recoveries'] += o['_auto_recovery']
+            ls['human_recoveries']+= o['_human_recovery']
+        st.session_state.live_orders = st.session_state.live_orders[:50]
 
     st.markdown("---")
     st.markdown("### 🇺🇸 System Info")
@@ -534,7 +535,7 @@ with tab_live:
 
     st.divider()
     st.markdown('<div class="section-header">Simulation Controls</div>', unsafe_allow_html=True)
-    st.markdown("Generates Shopify-format synthetic orders every **5 seconds**, routes through the 3-layer governance engine, and updates **all KPIs across every tab** in real-time.")
+    st.markdown("Generates **3 Shopify-format orders every 2 seconds** (~90/min), routes each through the 3-layer governance engine, and updates **all KPIs across every tab** in real-time.")
 
     c1, c2, c3 = st.columns([1, 1, 3])
     with c1:
