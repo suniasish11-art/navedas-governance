@@ -23,6 +23,47 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# ── Password Protection ────────────────────────────────────────────────────────
+def _check_password() -> bool:
+    """Gate the entire app behind a password. Returns True if authenticated."""
+    if st.session_state.get("_authenticated"):
+        return True
+
+    # Centred login card
+    st.markdown("""
+    <div style='display:flex; justify-content:center; align-items:center;
+                min-height:80vh; flex-direction:column;'>
+      <div style='background:#111827; border:1px solid #1f2937; border-radius:20px;
+                  padding:48px 56px; max-width:420px; width:100%; text-align:center;'>
+        <div style='font-size:52px; margin-bottom:12px;'>🏛️</div>
+        <h2 style='color:white; margin:0 0 4px;'>Navedas GIP</h2>
+        <p style='color:#6b7280; font-size:13px; margin-bottom:32px;'>
+          Governance Intelligence Platform<br>Restricted Access
+        </p>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Centre the form using columns
+    _, col, _ = st.columns([1, 1.2, 1])
+    with col:
+        with st.form("login_form"):
+            pwd = st.text_input("Password", type="password", placeholder="Enter access password")
+            login = st.form_submit_button("🔐 Access Dashboard", use_container_width=True, type="primary")
+        if login:
+            # Read from Streamlit Secrets; fall back to env var for local dev
+            correct = st.secrets.get("APP_PASSWORD", os.environ.get("APP_PASSWORD", "Navedas@2024"))
+            if pwd == correct:
+                st.session_state["_authenticated"] = True
+                st.rerun()
+            else:
+                st.error("Incorrect password. Please try again.")
+    return False
+
+if not _check_password():
+    st.stop()
+# ── End Password Protection ────────────────────────────────────────────────────
+
 # ── Custom CSS ─────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
