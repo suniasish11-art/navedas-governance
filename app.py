@@ -556,6 +556,126 @@ with tab_live:
             }
             st.rerun()
 
+    # ── Manual Order Entry ─────────────────────────────────────────────────────
+    st.divider()
+    st.markdown('<div class="section-header">✍️ Manual Order Entry — Submit Your Own Order</div>',
+                unsafe_allow_html=True)
+    st.markdown("Enter any order details below. The governance engine will route it through all 3 layers and update every KPI on the dashboard instantly.")
+
+    with st.form("manual_order_form", clear_on_submit=True):
+        col_a, col_b, col_c = st.columns(3)
+        with col_a:
+            m_value  = st.number_input("Order Value ($)", min_value=1, max_value=100000, value=1200, step=50)
+            m_margin = st.slider("Margin %", min_value=10, max_value=60, value=35)
+        with col_b:
+            m_state  = st.selectbox("US State", ['CA','TX','NY','FL','IL','PA','OH','GA','NC','MI',
+                                                  'NJ','VA','WA','AZ','MA','TN','IN','MO','MD','WI'])
+            m_demand = st.selectbox("Demand Level", ["High", "Medium", "Low"])
+        with col_c:
+            m_reason = st.selectbox("Cancellation Reason", [
+                'Payment Expired', 'Vendor Split Possible',
+                'Stock Sync Delay', 'AI Logic Gap - SKU Mapping'
+            ])
+            m_ai_cancel = st.checkbox("AI Flagged for Cancellation", value=True)
+
+        submitted = st.form_submit_button("🚀 Submit Order to Governance Engine",
+                                          use_container_width=True, type="primary")
+
+    if submitted:
+        import random as _r
+        margin = m_margin / 100
+
+        # Layer 1 — AI cancel decision
+        ai_cancel = m_ai_cancel
+
+        # Layer 2/3 routing (same logic as generate_live_order)
+        tier = 'None'
+        recoverable = False
+        if ai_cancel:
+            recoverable = True
+            if m_value < 75:                       tier = 'Auto'
+            elif margin > 0.40 or m_value > 3000:  tier = 'Human'
+            else:                                  tier = 'Auto'
+
+        # Success probability by tier
+        success_rate = {'Auto': 0.85, 'Human': 0.80}.get(tier, 0)
+        success = ai_cancel and recoverable and (_r.random() < success_rate)
+
+        # Cost
+        cost = 0
+        if ai_cancel and recoverable:
+            cost = 5 if m_value < 75 else (25 if tier == 'Human' else 15)
+
+        # Outcome label
+        if not ai_cancel:        icon, label = '🟢', 'Fulfilled'
+        elif not recoverable:    icon, label = '🔴', 'Not Recoverable'
+        elif success:            icon, label = '🟢', 'Recovered ✓'
+        else:                    icon, label = '🟡', 'Failed'
+
+        rev_prevented = m_value if success else 0
+        ms = m_value * margin if success else 0
+
+        st.session_state.live_counter += 1
+        o = {
+            'Order':   f'#MNL-{st.session_state.live_counter}',
+            'State':   m_state,   'Demand':  m_demand,
+            'Value':   f'${m_value:,.0f}',
+            'Margin':  f'{m_margin}%',
+            'Reason':  m_reason,  'Tier':    tier,
+            'Outcome': f'{icon} {label}',
+            '_rev_prevented':  rev_prevented,
+            '_margin_saved':   ms,
+            '_int_cost':       cost,
+            '_net_profit':     ms - cost,
+            '_residual_loss':  m_value if (recoverable and not success) else 0,
+            '_ai_cancelled':   1 if ai_cancel else 0,
+            '_recoverable':    1 if recoverable else 0,
+            '_not_recoverable':1 if (ai_cancel and not recoverable) else 0,
+            '_recovered':      1 if success else 0,
+            '_auto_recovery':  1 if (tier == 'Auto' and success) else 0,
+            '_human_recovery': 1 if (tier == 'Human' and success) else 0,
+        }
+
+        # Push to live stream
+        st.session_state.live_orders.insert(0, o)
+        st.session_state.live_orders = st.session_state.live_orders[:50]
+
+        # Update ALL live stats
+        ls2 = st.session_state.live_stats
+        ls2['count']            += 1
+        ls2['rev_prevented']    += o['_rev_prevented']
+        ls2['margin_saved']     += o['_margin_saved']
+        ls2['int_cost']         += o['_int_cost']
+        ls2['net_profit']       += o['_net_profit']
+        ls2['residual_loss']    += o['_residual_loss']
+        ls2['ai_cancelled']     += o['_ai_cancelled']
+        ls2['recoverable']      += o['_recoverable']
+        ls2['not_recoverable']  += o['_not_recoverable']
+        ls2['recovered']        += o['_recovered']
+        ls2['auto_recoveries']  += o['_auto_recovery']
+        ls2['human_recoveries'] += o['_human_recovery']
+
+        # Show result card
+        result_color = '#10b981' if success else ('#f43f5e' if not recoverable else '#f59e0b')
+        st.markdown(f"""
+        <div style='background:#111827; border:2px solid {result_color}; border-radius:12px; padding:16px; margin-top:12px;'>
+          <div style='font-size:18px; font-weight:700; color:{result_color};'>{icon} {label} — Order {o['Order']}</div>
+          <div style='color:#9ca3af; margin-top:8px; font-size:13px;'>
+            Value: <b style='color:white'>${m_value:,.0f}</b> &nbsp;|&nbsp;
+            Margin: <b style='color:white'>{m_margin}%</b> &nbsp;|&nbsp;
+            Tier: <b style='color:#38bdf8'>{tier}</b> &nbsp;|&nbsp;
+            State: <b style='color:white'>{m_state}</b>
+          </div>
+          <div style='color:#9ca3af; margin-top:6px; font-size:13px;'>
+            Revenue Prevented: <b style='color:#10b981'>${rev_prevented:,.0f}</b> &nbsp;|&nbsp;
+            Margin Saved: <b style='color:#10b981'>${ms:,.0f}</b> &nbsp;|&nbsp;
+            Agent Cost: <b style='color:#f59e0b'>${cost}</b> &nbsp;|&nbsp;
+            Net Profit: <b style='color:#10b981'>${ms-cost:,.0f}</b>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.rerun()
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 5 — RISK
