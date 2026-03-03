@@ -71,7 +71,8 @@ if 'sim_running' not in st.session_state:  st.session_state.sim_running = False
 if 'live_counter' not in st.session_state: st.session_state.live_counter = 800000
 if 'live_stats' not in st.session_state:
     st.session_state.live_stats = {'rev_prevented': 0, 'margin_saved': 0,
-                                   'int_cost': 0, 'net_profit': 0, 'count': 0}
+                                   'int_cost': 0, 'net_profit': 0, 'count': 0,
+                                   'ai_cancelled': 0, 'recovered': 0}
 
 # ── Auto-refresh when simulation running ───────────────────────────────────────
 if st.session_state.sim_running:
@@ -139,6 +140,10 @@ with st.sidebar:
         ls['int_cost'] += new_order['_int_cost']
         ls['net_profit'] += new_order['_net_profit']
         ls['count'] += 1
+        if new_order['Tier'] != 'None':
+            ls['ai_cancelled'] += 1
+        if '🟢 Recovered' in new_order['Outcome']:
+            ls['recovered'] += 1
 
     st.markdown("---")
     st.markdown("### 🇺🇸 System Info")
@@ -180,7 +185,8 @@ ls = st.session_state.live_stats
 col_h1, col_h2, col_h3 = st.columns([3, 1, 1])
 with col_h1:
     st.markdown("## 🏛️ Navedas Governance Intelligence Platform")
-    st.markdown(f"<p style='color:#6b7280; margin-top:-8px;'>Real-Time AI Order Governance · {kpis['total_orders']:,} orders · US/Shopify Aligned</p>", unsafe_allow_html=True)
+    total_incl_live = kpis['total_orders'] + ls['count']
+    st.markdown(f"<p style='color:#6b7280; margin-top:-8px;'>Real-Time AI Order Governance · {total_incl_live:,} orders · US/Shopify Aligned</p>", unsafe_allow_html=True)
 with col_h2:
     st.metric("Governance ROI", f"{kpis['roi']:.1f}x", delta="vs AI-only baseline")
 with col_h3:
@@ -202,9 +208,14 @@ with tab_overview:
     # ── AI Baseline ────────────────────────────────────────────────────────────
     st.markdown('<div class="section-header">Layer 1 — AI Baseline · Unmitigated cancellation impact</div>', unsafe_allow_html=True)
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Total Orders", f"{kpis['total_orders']:,}")
-    c2.metric("AI Cancel Rate", f"{kpis['ai_cancel_rate']*100:.1f}%",
-              delta=f"{kpis['ai_cancelled']:,} cancelled", delta_color="inverse")
+    combined_total = kpis['total_orders'] + ls['count']
+    combined_cancelled = kpis['ai_cancelled'] + ls['ai_cancelled']
+    combined_cancel_rate = combined_cancelled / combined_total if combined_total > 0 else 0
+    combined_rev_prevented = kpis['revenue_prevented'] + ls['rev_prevented']
+    c1.metric("Total Orders", f"{combined_total:,}",
+              delta=f"+{ls['count']} live" if ls['count'] > 0 else None)
+    c2.metric("AI Cancel Rate", f"{combined_cancel_rate*100:.1f}%",
+              delta=f"{combined_cancelled:,} cancelled", delta_color="inverse")
     c3.metric("Revenue Lost (AI Only)", f"${kpis['revenue_lost_ai']:,.0f}",
               delta="Before governance", delta_color="inverse")
     c4.metric("Profit Lost (AI Only)", f"${kpis['profit_lost_ai']:,.0f}",
@@ -229,11 +240,16 @@ with tab_overview:
     # ── Governance Impact ──────────────────────────────────────────────────────
     st.markdown('<div class="section-header">Governance Impact · Layer 2+3 combined Navedas performance</div>', unsafe_allow_html=True)
     c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("Revenue Prevented", f"${kpis['revenue_prevented']:,.0f}", delta="Saved from cancellation")
-    c2.metric("Margin Saved", f"${kpis['margin_saved']:,.0f}", delta="Gross profit recovered")
-    c3.metric("Intervention Cost", f"${kpis['intervention_cost']:,.0f}", delta="Total agent spend")
-    c4.metric("Net Profit Impact", f"${kpis['net_profit']:,.0f}", delta="Margin − Cost")
-    c5.metric("Governance ROI", f"{kpis['roi']:.1f}x", delta="Margin ÷ Cost")
+    comb_rev_prev = kpis['revenue_prevented'] + ls['rev_prevented']
+    comb_margin   = kpis['margin_saved'] + ls['margin_saved']
+    comb_cost     = kpis['intervention_cost'] + ls['int_cost']
+    comb_net      = kpis['net_profit'] + ls['net_profit']
+    comb_roi      = comb_margin / comb_cost if comb_cost > 0 else kpis['roi']
+    c1.metric("Revenue Prevented", f"${comb_rev_prev:,.0f}", delta="Saved from cancellation")
+    c2.metric("Margin Saved", f"${comb_margin:,.0f}", delta="Gross profit recovered")
+    c3.metric("Intervention Cost", f"${comb_cost:,.0f}", delta="Total agent spend")
+    c4.metric("Net Profit Impact", f"${comb_net:,.0f}", delta="Margin − Cost")
+    c5.metric("Governance ROI", f"{comb_roi:.1f}x", delta="Margin ÷ Cost")
 
     st.divider()
 
@@ -497,7 +513,8 @@ with tab_live:
         if st.button("🗑 Clear History", use_container_width=True):
             st.session_state.live_orders = []
             st.session_state.live_stats = {'rev_prevented': 0, 'margin_saved': 0,
-                                           'int_cost': 0, 'net_profit': 0, 'count': 0}
+                                           'int_cost': 0, 'net_profit': 0, 'count': 0,
+                                           'ai_cancelled': 0, 'recovered': 0}
             st.rerun()
 
 
