@@ -4,6 +4,9 @@ import numpy as np
 import random
 import io
 import datetime
+import sqlite3
+import os
+import tempfile
 
 US_STATES = ['CA', 'TX', 'NY', 'FL', 'IL', 'PA', 'OH', 'GA', 'NC', 'MI',
              'NJ', 'VA', 'WA', 'AZ', 'MA', 'TN', 'IN', 'MO', 'MD', 'WI']
@@ -143,6 +146,48 @@ def compute_agent_stats(df: pd.DataFrame) -> pd.DataFrame:
     ]
     df_out = pd.DataFrame(agents, columns=['Agent', 'Type', 'Recoveries', 'Margin Saved', 'Avg Latency (min)', 'Success Rate (%)'])
     return df_out.sort_values('Margin Saved', ascending=False).reset_index(drop=True)
+
+
+_DB_FILE = os.path.join(tempfile.gettempdir(), 'navedas_governance.db')
+
+
+def load_csv_to_db(csv_content: str) -> str:
+    """Parse CSV → clean DataFrame → insert into SQLite. Returns db_path."""
+    df = load_data(csv_content)
+    # Convert period/datetime back to strings for SQLite storage
+    df['order_date'] = df['order_date'].astype(str)
+    conn = sqlite3.connect(_DB_FILE)
+    df.to_sql('orders', conn, if_exists='replace', index=False)
+    conn.close()
+    return _DB_FILE
+
+
+def load_from_db(db_path: str = _DB_FILE) -> pd.DataFrame:
+    """Load orders table from SQLite and return a clean DataFrame."""
+    conn = sqlite3.connect(db_path)
+    df = pd.read_sql('SELECT * FROM orders', conn)
+    conn.close()
+    df['order_date'] = pd.to_datetime(df['order_date'], errors='coerce')
+    for col in INT_COLS:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
+    for col in NUMERIC_COLS:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+    return df
+
+
+def db_exists(db_path: str = _DB_FILE) -> bool:
+    """Return True if the DB file exists and has the orders table."""
+    if not os.path.exists(db_path):
+        return False
+    try:
+        conn = sqlite3.connect(db_path)
+        count = conn.execute("SELECT COUNT(*) FROM orders").fetchone()[0]
+        conn.close()
+        return count > 0
+    except Exception:
+        return False
 
 
 FAILURE_REASONS = [
