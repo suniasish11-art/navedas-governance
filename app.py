@@ -295,8 +295,8 @@ with st.sidebar:
     st.markdown("""
 <div style='font-family:Inter,sans-serif;background:#f8f7ff;border:1px solid #ede9fe;
             border-radius:10px;padding:12px 14px;margin-top:4px;'>
-  <div style='font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
-              color:#7c3aed;margin-bottom:8px;'>🇺🇸 System Info</div>
+  <div style='font-family:Inter,sans-serif;font-size:14px;font-weight:700;
+              color:#1e293b;margin-bottom:8px;'>🇺🇸 System Info</div>
   <div style='font-size:12px;color:#374151;line-height:1.9;'>
     <span style='color:#9ca3af;'>Currency</span>&nbsp;&nbsp;<strong>USD ($)</strong><br>
     <span style='color:#9ca3af;'>Timezone</span>&nbsp;&nbsp;<strong>EST (New York)</strong><br>
