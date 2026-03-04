@@ -79,75 +79,96 @@ if not _check_password():
 # ── Custom CSS ─────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-  html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+  html, body, [class*="css"], * { font-family: 'Inter', sans-serif !important; }
 
-  /* ── Light theme base ── */
-  .main { background: #f8fafc !important; }
-  section[data-testid="stSidebar"] { background: #ffffff !important; border-right: 1px solid #e2e8f0 !important; }
-  section[data-testid="stSidebar"] * { color: #1e293b !important; }
-  .stApp { background: #f8fafc; }
-
-  /* ── Metric cards ── */
-  .stMetric {
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 14px;
-    padding: 18px !important;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
-    transition: box-shadow 0.2s;
+  /* ── Base ── */
+  .stApp { background: #f4f6fa !important; }
+  .main  { background: #f4f6fa !important; }
+  section[data-testid="stSidebar"] {
+    background: #ffffff !important;
+    border-right: 2px solid #ede9fe !important;
   }
-  .stMetric:hover { box-shadow: 0 4px 16px rgba(124,58,237,0.10); }
-  .stMetric label { color: #64748b !important; font-size: 11px !important; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600 !important; }
-  .stMetric [data-testid="stMetricValue"] { color: #1e293b !important; font-size: 22px !important; font-weight: 700 !important; }
-  .stMetric [data-testid="stMetricDelta"] { font-size: 11px !important; }
-  div[data-testid="stHorizontalBlock"] { gap: 12px; }
+  section[data-testid="stSidebar"] .stMarkdown p,
+  section[data-testid="stSidebar"] label,
+  section[data-testid="stSidebar"] span { color: #374151 !important; }
 
-  /* ── Section headers ── */
-  .section-header {
-    color: #7c3aed;
-    font-size: 11px; font-weight: 700; text-transform: uppercase;
-    letter-spacing: 0.09em; margin-bottom: 14px; padding-bottom: 8px;
-    border-bottom: 2px solid #ede9fe;
-  }
-
-  /* ── Tabs ── */
+  /* ── Tabs — active = purple pill ── */
   .stTabs [data-baseweb="tab-list"] {
-    gap: 6px; background: #f1f5f9; border-radius: 12px; padding: 4px;
-    border: 1px solid #e2e8f0;
+    background: #ffffff !important;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 12px !important;
+    padding: 5px !important;
+    gap: 4px !important;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06) !important;
   }
-  .stTabs [data-baseweb="tab"] { border-radius: 9px; color: #64748b !important; font-size: 13px; font-weight: 500; padding: 8px 18px; }
-  .stTabs [aria-selected="true"] { background: #ffffff !important; color: #7c3aed !important; box-shadow: 0 1px 4px rgba(0,0,0,0.10); font-weight: 600 !important; }
-  .stTabs [data-baseweb="tab-panel"] { padding-top: 16px; }
-
-  /* ── Dividers & HR ── */
-  hr { border-color: #e2e8f0 !important; }
-
-  /* ── Headings ── */
-  h1, h2, h3 { color: #1e293b !important; }
-
-  /* ── Dataframe ── */
-  .stDataFrame { border-radius: 10px; border: 1px solid #e2e8f0 !important; overflow: hidden; }
-
-  /* ── Expander ── */
-  .streamlit-expanderHeader { color: #1e293b !important; font-weight: 500; }
+  .stTabs [data-baseweb="tab"] {
+    background: transparent !important;
+    border-radius: 8px !important;
+    color: #6b7280 !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    padding: 8px 18px !important;
+    border: none !important;
+  }
+  .stTabs [aria-selected="true"] {
+    background: #7c3aed !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    border-radius: 8px !important;
+  }
+  /* force override BaseWeb indicator bar */
+  .stTabs [data-baseweb="tab-highlight"] { display: none !important; }
+  .stTabs [data-baseweb="tab-border"]    { display: none !important; }
 
   /* ── Buttons ── */
-  .stButton button[kind="primary"] { background: #7c3aed !important; border-color: #7c3aed !important; color: white !important; border-radius: 8px; }
-  .stButton button { border-radius: 8px; border: 1px solid #e2e8f0; color: #374151; }
+  button[kind="primary"], .stButton > button[data-testid*="primary"] {
+    background: #7c3aed !important; border-color: #7c3aed !important;
+    color: white !important; border-radius: 8px !important; font-weight: 600 !important;
+  }
+  .stButton > button {
+    border-radius: 8px !important;
+    border: 1px solid #e5e7eb !important;
+    color: #374151 !important;
+    font-weight: 500 !important;
+  }
 
-  /* ── Form inputs ── */
-  .stTextInput input, .stSelectbox select, .stNumberInput input { background: #ffffff !important; border: 1px solid #d1d5db !important; border-radius: 8px !important; color: #1e293b !important; }
+  /* ── Dataframe ── */
+  .stDataFrame { border-radius: 12px !important; border: 1px solid #e5e7eb !important; overflow: hidden !important; }
+  [data-testid="stDataFrame"] { background: white !important; border-radius: 12px !important; }
+
+  /* ── Expanders ── */
+  [data-testid="stExpander"] {
+    background: #ffffff !important;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 10px !important;
+  }
+
+  /* ── Form ── */
+  [data-testid="stForm"] {
+    background: #ffffff !important;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 14px !important;
+    padding: 20px !important;
+  }
+
+  /* ── Section headers (class-based, used in chart areas) ── */
+  .section-header {
+    font-size: 11px !important; font-weight: 700 !important;
+    text-transform: uppercase !important; letter-spacing: .09em !important;
+    color: #7c3aed !important; margin-bottom: 14px !important;
+    padding-bottom: 8px !important; border-bottom: 2px solid #ede9fe !important;
+  }
+
+  /* ── Dividers ── */
+  hr { border-color: #e5e7eb !important; }
 
   /* ── Live badge ── */
   .live-badge {
     display: inline-block; width: 8px; height: 8px; border-radius: 50%;
     background: #10b981; animation: pulse 1.5s infinite; margin-right: 6px;
   }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-
-  /* ── Purple top-border accent (branding) ── */
-  .main > div:first-child { border-top: 3px solid #7c3aed; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 
   footer { visibility: hidden; }
   #MainMenu { visibility: hidden; }
@@ -318,23 +339,68 @@ C['auto_recoveries']= kpis['auto_recoveries']     + ls['auto_recoveries']
 C['human_recoveries']= kpis['human_recoveries']  + ls['human_recoveries']
 C['live_count']     = ls['count']
 
-# ── Header ─────────────────────────────────────────────────────────────────────
-col_h1, col_h2, col_h3 = st.columns([3, 1, 1])
-with col_h1:
-    st.markdown("## 🏛️ Navedas Governance Intelligence Platform")
-    st.markdown(
-        f"<p style='color:#64748b; margin-top:-8px;'>"
-        f"Real-Time AI Order Governance · {C['total']:,} orders · US/Shopify Aligned"
-        f"</p>", unsafe_allow_html=True)
-with col_h2:
-    st.metric("Governance ROI", f"{C['roi']:.1f}x", delta="vs AI-only baseline")
-with col_h3:
-    st.metric("Live Orders", len(st.session_state.live_orders),
-              delta="streaming" if st.session_state.sim_running else "paused")
+# ── HTML card helpers (CSAT.AI style) ─────────────────────────────────────────
+def kc(label, value, sub="", bg="#f5f3ff", color="#7c3aed", border="#ddd6fe"):
+    sub_html = f"<div style='font-size:11px;color:#9ca3af;margin-top:5px;'>{sub}</div>" if sub else ""
+    return (f"<div style='flex:1;background:{bg};border:1px solid {border};"
+            f"border-radius:14px;padding:20px 22px;min-width:0;'>"
+            f"<div style='font-size:10px;font-weight:700;text-transform:uppercase;"
+            f"letter-spacing:.08em;color:#6b7280;margin-bottom:8px;'>{label}</div>"
+            f"<div style='font-size:24px;font-weight:800;color:{color};line-height:1.1;'>{value}</div>"
+            f"{sub_html}</div>")
 
-st.divider()
+def kr(*cards):
+    return "<div style='display:flex;gap:12px;margin-bottom:16px;'>" + "".join(cards) + "</div>"
+
+def sh(title):
+    return (f"<div style='font-size:11px;font-weight:700;text-transform:uppercase;"
+            f"letter-spacing:.09em;color:#7c3aed;margin-bottom:14px;margin-top:6px;"
+            f"padding-bottom:8px;border-bottom:2px solid #ede9fe;'>{title}</div>")
+
+# ── Header banner (CSAT.AI style gradient) ────────────────────────────────────
+live_dot = "🟢 LIVE" if st.session_state.sim_running else "⏸ Paused"
+live_chip_style = ("background:rgba(16,185,129,.25);color:#d1fae5;" if st.session_state.sim_running
+                   else "background:rgba(255,255,255,.15);color:rgba(255,255,255,.7);")
+st.markdown(f"""
+<div style='background:linear-gradient(135deg,#7c3aed 0%,#4f46e5 55%,#0ea5e9 100%);
+            border-radius:20px;padding:28px 36px;margin-bottom:24px;color:white;'>
+  <div style='display:flex;align-items:flex-start;gap:14px;margin-bottom:20px;'>
+    <span style='font-size:34px;'>🏛️</span>
+    <div style='flex:1;'>
+      <div style='font-size:20px;font-weight:800;line-height:1.2;'>Navedas Governance Intelligence Platform</div>
+      <div style='font-size:13px;opacity:.8;margin-top:3px;'>
+        Real-Time AI Order Governance &nbsp;·&nbsp; {C['total']:,} orders &nbsp;·&nbsp; US/Shopify Aligned
+      </div>
+    </div>
+    <div style='border-radius:20px;padding:5px 14px;font-size:12px;font-weight:700;{live_chip_style}'>{live_dot}</div>
+  </div>
+  <div style='display:flex;gap:0;'>
+    <div style='flex:1;border-right:1px solid rgba(255,255,255,.2);padding-right:28px;'>
+      <div style='font-size:10px;text-transform:uppercase;letter-spacing:.1em;opacity:.7;'>Governance ROI</div>
+      <div style='font-size:32px;font-weight:800;margin-top:2px;'>{C['roi']:.1f}x</div>
+      <div style='font-size:11px;opacity:.6;'>vs AI-only baseline</div>
+    </div>
+    <div style='flex:1;padding-left:28px;border-right:1px solid rgba(255,255,255,.2);padding-right:28px;'>
+      <div style='font-size:10px;text-transform:uppercase;letter-spacing:.1em;opacity:.7;'>Revenue Prevented</div>
+      <div style='font-size:32px;font-weight:800;margin-top:2px;'>${C['rev_prevented']/1e6:.2f}M</div>
+      <div style='font-size:11px;opacity:.6;'>Saved from cancellation</div>
+    </div>
+    <div style='flex:1;padding-left:28px;border-right:1px solid rgba(255,255,255,.2);padding-right:28px;'>
+      <div style='font-size:10px;text-transform:uppercase;letter-spacing:.1em;opacity:.7;'>Net Profit Impact</div>
+      <div style='font-size:32px;font-weight:800;margin-top:2px;'>${C['net_profit']/1e6:.2f}M</div>
+      <div style='font-size:11px;opacity:.6;'>Margin − Cost</div>
+    </div>
+    <div style='flex:1;padding-left:28px;'>
+      <div style='font-size:10px;text-transform:uppercase;letter-spacing:.1em;opacity:.7;'>Live Orders</div>
+      <div style='font-size:32px;font-weight:800;margin-top:2px;'>{len(st.session_state.live_orders):,}</div>
+      <div style='font-size:11px;opacity:.6;'>in session feed</div>
+    </div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
 
 # ── TABS ───────────────────────────────────────────────────────────────────────
+
 tab_overview, tab_governance, tab_agents, tab_live, tab_risk = st.tabs([
     "📊 Overview", "🏛️ Governance", "👥 Agents", "📡 Live Feed", "⚠️ Risk"
 ])
@@ -346,47 +412,41 @@ tab_overview, tab_governance, tab_agents, tab_live, tab_risk = st.tabs([
 with tab_overview:
 
     # ── Layer 1: AI Baseline ───────────────────────────────────────────────────
-    st.markdown('<div class="section-header">Layer 1 — AI Baseline · Unmitigated cancellation impact</div>',
-                unsafe_allow_html=True)
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Total Orders", f"{C['total']:,}",
-              delta=f"+{C['live_count']} live" if C['live_count'] > 0 else None)
-    c2.metric("AI Cancel Rate", f"{C['cancel_rate']*100:.1f}%",
-              delta=f"{C['ai_cancelled']:,} cancelled", delta_color="inverse")
-    c3.metric("Revenue Lost (AI Only)", f"${kpis['revenue_lost_ai']:,.0f}",
-              delta="Before governance", delta_color="inverse")
-    c4.metric("Profit Lost (AI Only)", f"${kpis['profit_lost_ai']:,.0f}",
-              delta="Gross profit exposure", delta_color="inverse")
-
-    st.divider()
+    live_sub = f"+{C['live_count']} live" if C['live_count'] > 0 else f"{C['total']:,} total"
+    st.markdown(
+        sh("Layer 1 — AI Baseline · Unmitigated cancellation impact") +
+        kr(
+            kc("Total Orders",          f"{C['total']:,}",                   live_sub,                              "#f0fdf4", "#059669", "#bbf7d0"),
+            kc("AI Cancel Rate",        f"{C['cancel_rate']*100:.1f}%",      f"{C['ai_cancelled']:,} cancelled",    "#fff1f2", "#e11d48", "#fecdd3"),
+            kc("Revenue Lost (AI Only)",f"${kpis['revenue_lost_ai']:,.0f}",  "Before governance",                  "#fff1f2", "#e11d48", "#fecdd3"),
+            kc("Profit Lost (AI Only)", f"${kpis['profit_lost_ai']:,.0f}",   "Gross profit exposure",              "#fff1f2", "#e11d48", "#fecdd3"),
+        ),
+        unsafe_allow_html=True)
 
     # ── Recoverability ─────────────────────────────────────────────────────────
-    st.markdown('<div class="section-header">Recoverability Analysis · How much can governance recover?</div>',
-                unsafe_allow_html=True)
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Recoverable Orders", f"{C['recoverable']:,}",
-              delta=f"+{ls['recoverable']} live" if ls['recoverable'] > 0 else f"{C['pct_recoverable']*100:.1f}% of cancelled")
-    c2.metric("Recovery Rate (Pool)", f"{C['recovery_rate_pool']*100:.1f}%",
-              delta=f"{C['recovered']:,} saved" if ls['recovered'] > 0 else "Of recoverable orders")
-    c3.metric("Net Recovery Rate", f"{C['net_recovery_rate']*100:.1f}%",
-              delta=f"+{ls['recovered']} live saved" if ls['recovered'] > 0 else "Of all AI-cancelled")
-    c4.metric("Unrecoverable", f"{C['not_recoverable']:,}",
-              delta=f"+{ls['not_recoverable']} live" if ls['not_recoverable'] > 0 else "Correctly left as-is",
-              delta_color="off")
-
-    st.divider()
+    rec_sub  = f"+{ls['recoverable']} live" if ls['recoverable'] > 0 else f"{C['pct_recoverable']*100:.1f}% of cancelled"
+    saved_sub= f"{C['recovered']:,} saved" if ls['recovered'] > 0 else "Of recoverable orders"
+    st.markdown(
+        sh("Recoverability Analysis · How much can governance recover?") +
+        kr(
+            kc("Recoverable Orders",    f"{C['recoverable']:,}",                  rec_sub,                          "#f5f3ff", "#7c3aed", "#ddd6fe"),
+            kc("Recovery Rate (Pool)",  f"{C['recovery_rate_pool']*100:.1f}%",    saved_sub,                        "#eff6ff", "#2563eb", "#bfdbfe"),
+            kc("Net Recovery Rate",     f"{C['net_recovery_rate']*100:.1f}%",     "Of all AI-cancelled",            "#eff6ff", "#2563eb", "#bfdbfe"),
+            kc("Unrecoverable",         f"{C['not_recoverable']:,}",              "Correctly left as-is",           "#fafafa", "#6b7280", "#e5e7eb"),
+        ),
+        unsafe_allow_html=True)
 
     # ── Governance Impact ──────────────────────────────────────────────────────
-    st.markdown('<div class="section-header">Governance Impact · Layer 2+3 combined Navedas performance</div>',
-                unsafe_allow_html=True)
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("Revenue Prevented", f"${C['rev_prevented']:,.0f}", delta="Saved from cancellation")
-    c2.metric("Margin Saved",      f"${C['margin_saved']:,.0f}",  delta="Gross profit recovered")
-    c3.metric("Intervention Cost", f"${C['int_cost']:,.0f}",      delta="Total agent spend")
-    c4.metric("Net Profit Impact", f"${C['net_profit']:,.0f}",    delta="Margin − Cost")
-    c5.metric("Governance ROI",    f"{C['roi']:.1f}x",            delta="Margin ÷ Cost")
-
-    st.divider()
+    st.markdown(
+        sh("Governance Impact · Layer 2+3 combined Navedas performance") +
+        kr(
+            kc("Revenue Prevented", f"${C['rev_prevented']:,.0f}",  "Saved from cancellation", "#f0fdf4", "#059669", "#bbf7d0"),
+            kc("Margin Saved",      f"${C['margin_saved']:,.0f}",   "Gross profit recovered",  "#f0fdf4", "#059669", "#bbf7d0"),
+            kc("Intervention Cost", f"${C['int_cost']:,.0f}",       "Total agent spend",        "#fffbeb", "#d97706", "#fde68a"),
+            kc("Net Profit Impact", f"${C['net_profit']:,.0f}",     "Margin − Cost",            "#f0fdf4", "#059669", "#bbf7d0"),
+            kc("Governance ROI",    f"{C['roi']:.1f}x",             "Margin ÷ Cost",            "#f5f3ff", "#7c3aed", "#ddd6fe"),
+        ),
+        unsafe_allow_html=True)
 
     # ── Charts row ─────────────────────────────────────────────────────────────
     col_w, col_g = st.columns([2, 1])
@@ -454,29 +514,33 @@ with tab_overview:
         st.plotly_chart(fig_g, use_container_width=True)
 
     # ── Operational ────────────────────────────────────────────────────────────
-    st.markdown('<div class="section-header">Operational Metrics</div>', unsafe_allow_html=True)
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Auto Recoveries",   f"{C['auto_recoveries']:,}",
-              delta=f"+{ls['auto_recoveries']} live" if ls['auto_recoveries'] > 0 else "Layer 2 agent")
-    c2.metric("Human Recoveries",  f"{C['human_recoveries']:,}",
-              delta=f"+{ls['human_recoveries']} live" if ls['human_recoveries'] > 0 else "Layer 3 agent")
-    c3.metric("Avg Recovery Time", f"{kpis['avg_latency']:.1f} min")
-    c4.metric("SLA Compliance",    f"{kpis['sla_compliance']*100:.1f}%",
-              delta=f"Split fulfillment: {kpis['split_rate']*100:.1f}%")
+    auto_sub  = f"+{ls['auto_recoveries']} live" if ls['auto_recoveries'] > 0 else "Layer 2 agent"
+    human_sub = f"+{ls['human_recoveries']} live" if ls['human_recoveries'] > 0 else "Layer 3 agent"
+    st.markdown(
+        sh("Operational Metrics") +
+        kr(
+            kc("Auto Recoveries",   f"{C['auto_recoveries']:,}",           auto_sub,                                     "#eff6ff", "#2563eb", "#bfdbfe"),
+            kc("Human Recoveries",  f"{C['human_recoveries']:,}",          human_sub,                                    "#f5f3ff", "#7c3aed", "#ddd6fe"),
+            kc("Avg Recovery Time", f"{kpis['avg_latency']:.1f} min",      "Per intervention",                           "#fffbeb", "#d97706", "#fde68a"),
+            kc("SLA Compliance",    f"{kpis['sla_compliance']*100:.1f}%",  f"Split: {kpis['split_rate']*100:.1f}%",      "#f0fdf4", "#059669", "#bbf7d0"),
+        ),
+        unsafe_allow_html=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 2 — GOVERNANCE
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_governance:
-    st.markdown('<div class="section-header">Governance Financial Intelligence · Full lifecycle analysis</div>',
-                unsafe_allow_html=True)
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("Revenue Prevented", f"${C['rev_prevented']:,.0f}")
-    c2.metric("Margin Saved",      f"${C['margin_saved']:,.0f}")
-    c3.metric("Int. Cost",         f"${C['int_cost']:,.0f}")
-    c4.metric("Net Profit",        f"${C['net_profit']:,.0f}")
-    c5.metric("ROI",               f"{C['roi']:.1f}x")
+    st.markdown(
+        sh("Governance Financial Intelligence · Full lifecycle analysis") +
+        kr(
+            kc("Revenue Prevented", f"${C['rev_prevented']:,.0f}", "Saved from cancellation", "#f0fdf4", "#059669", "#bbf7d0"),
+            kc("Margin Saved",      f"${C['margin_saved']:,.0f}",  "Gross profit recovered",  "#f0fdf4", "#059669", "#bbf7d0"),
+            kc("Int. Cost",         f"${C['int_cost']:,.0f}",      "Total agent spend",        "#fffbeb", "#d97706", "#fde68a"),
+            kc("Net Profit",        f"${C['net_profit']:,.0f}",    "Margin − Cost",            "#f0fdf4", "#059669", "#bbf7d0"),
+            kc("ROI",               f"{C['roi']:.1f}x",            "Margin ÷ Cost",            "#f5f3ff", "#7c3aed", "#ddd6fe"),
+        ),
+        unsafe_allow_html=True)
 
     # ROI + Margin trend
     col_t, col_m = st.columns(2)
@@ -590,16 +654,17 @@ with tab_agents:
     display_df['Success Rate (%)'] = display_df['Success Rate (%)'].apply(lambda v: f"{v:.1f}%")
     st.dataframe(display_df, use_container_width=True, hide_index=True)
 
-    st.divider()
-    st.markdown('<div class="section-header">Operational Performance — Combined Static + Live</div>',
-                unsafe_allow_html=True)
-    c1, c2, c3, c4, c5, c6 = st.columns(6)
-    c1.metric("Auto Recoveries",   f"{C['auto_recoveries']:,}",  delta="Layer 2 bots")
-    c2.metric("Human Recoveries",  f"{C['human_recoveries']:,}", delta="Layer 3 humans")
-    c3.metric("Total Recovered",   f"{C['recovered']:,}",        delta="All interventions")
-    c4.metric("Recovery Pool Rate",f"{C['recovery_rate_pool']*100:.1f}%", delta="Of recoverable")
-    c5.metric("Avg Recovery Time", f"{kpis['avg_latency']:.1f} min")
-    c6.metric("SLA Compliance",    f"{kpis['sla_compliance']*100:.1f}%")
+    st.markdown(
+        sh("Operational Performance — Combined Static + Live") +
+        kr(
+            kc("Auto Recoveries",    f"{C['auto_recoveries']:,}",               "Layer 2 bots",      "#eff6ff", "#2563eb", "#bfdbfe"),
+            kc("Human Recoveries",   f"{C['human_recoveries']:,}",              "Layer 3 humans",    "#f5f3ff", "#7c3aed", "#ddd6fe"),
+            kc("Total Recovered",    f"{C['recovered']:,}",                     "All interventions", "#f0fdf4", "#059669", "#bbf7d0"),
+            kc("Recovery Pool Rate", f"{C['recovery_rate_pool']*100:.1f}%",     "Of recoverable",    "#f0fdf4", "#059669", "#bbf7d0"),
+            kc("Avg Recovery Time",  f"{kpis['avg_latency']:.1f} min",          "Per order",         "#fffbeb", "#d97706", "#fde68a"),
+            kc("SLA Compliance",     f"{kpis['sla_compliance']*100:.1f}%",      "Service level",     "#f0fdf4", "#059669", "#bbf7d0"),
+        ),
+        unsafe_allow_html=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -624,21 +689,28 @@ with tab_live:
             st.dataframe(pd.DataFrame(display_orders), use_container_width=True, hide_index=True)
 
     with col_ls:
-        st.markdown('<div class="section-header">Live Session KPIs</div>', unsafe_allow_html=True)
-        st.metric("Orders Processed",   f"{ls['count']:,}")
-        st.metric("AI Cancelled",       f"{ls['ai_cancelled']:,}",
-                  delta=f"{ls['ai_cancelled']/ls['count']*100:.1f}% rate" if ls['count'] > 0 else None,
-                  delta_color="inverse")
-        st.metric("Recoverable",        f"{ls['recoverable']:,}")
-        st.metric("Successfully Saved", f"{ls['recovered']:,}")
-        st.metric("Revenue Prevented",  f"${ls['rev_prevented']:,.0f}")
-        st.metric("Margin Saved",       f"${ls['margin_saved']:,.0f}")
-        st.metric("Net Profit",         f"${ls['net_profit']:,.0f}")
-        st.metric("Residual Loss",      f"${ls['residual_loss']:,.0f}", delta_color="inverse",
-                  delta="Failed recoveries")
-        if ls['int_cost'] > 0:
-            session_roi = ls['margin_saved'] / ls['int_cost']
-            st.metric("Session ROI", f"{session_roi:.1f}x")
+        cancel_rate_sub = f"{ls['ai_cancelled']/ls['count']*100:.1f}% rate" if ls['count'] > 0 else "—"
+        session_roi_val = f"{ls['margin_saved']/ls['int_cost']:.1f}x" if ls['int_cost'] > 0 else "—"
+        st.markdown(
+            sh("Live Session KPIs") +
+            kc("Orders Processed",   f"{ls['count']:,}",           "this session",    "#f5f3ff", "#7c3aed", "#ddd6fe") +
+            "<div style='height:8px'></div>" +
+            kc("AI Cancelled",       f"{ls['ai_cancelled']:,}",    cancel_rate_sub,   "#fff1f2", "#e11d48", "#fecdd3") +
+            "<div style='height:8px'></div>" +
+            kc("Recoverable",        f"{ls['recoverable']:,}",     "flagged orders",  "#eff6ff", "#2563eb", "#bfdbfe") +
+            "<div style='height:8px'></div>" +
+            kc("Successfully Saved", f"{ls['recovered']:,}",       "interventions",   "#f0fdf4", "#059669", "#bbf7d0") +
+            "<div style='height:8px'></div>" +
+            kc("Revenue Prevented",  f"${ls['rev_prevented']:,.0f}","live prevented", "#f0fdf4", "#059669", "#bbf7d0") +
+            "<div style='height:8px'></div>" +
+            kc("Margin Saved",       f"${ls['margin_saved']:,.0f}", "gross profit",   "#f0fdf4", "#059669", "#bbf7d0") +
+            "<div style='height:8px'></div>" +
+            kc("Net Profit",         f"${ls['net_profit']:,.0f}",   "margin−cost",    "#f0fdf4", "#059669", "#bbf7d0") +
+            "<div style='height:8px'></div>" +
+            kc("Residual Loss",      f"${ls['residual_loss']:,.0f}","failed recoveries","#fff1f2","#e11d48","#fecdd3")+
+            "<div style='height:8px'></div>" +
+            kc("Session ROI",        session_roi_val,               "margin÷cost",    "#f5f3ff", "#7c3aed", "#ddd6fe"),
+            unsafe_allow_html=True)
 
     st.divider()
     st.markdown('<div class="section-header">Simulation Controls</div>', unsafe_allow_html=True)
@@ -789,16 +861,15 @@ with tab_live:
 # TAB 5 — RISK
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_risk:
-    st.markdown('<div class="section-header">Residual Risk Analysis</div>', unsafe_allow_html=True)
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Residual Recoverable Loss", f"${C['residual_loss']:,.0f}",
-              delta="Revenue still at risk after governance", delta_color="inverse")
-    c2.metric("Legitimate Non-Recoverable", f"{C['not_recoverable']:,}",
-              delta="Orders correctly left unrecovered", delta_color="off")
-    c3.metric("Successfully Recovered",    f"{C['recovered']:,}",
-              delta=f"{C['recovery_rate_pool']*100:.1f}% of recoverable pool")
-    c4.metric("Net Revenue Protected",     f"${C['rev_prevented']:,.0f}",
-              delta="Cumulative static + live")
+    st.markdown(
+        sh("Residual Risk Analysis") +
+        kr(
+            kc("Residual Recoverable Loss", f"${C['residual_loss']:,.0f}",  "Revenue still at risk",                    "#fff1f2", "#e11d48", "#fecdd3"),
+            kc("Legitimate Non-Recoverable",f"{C['not_recoverable']:,}",    "Correctly left as-is",                     "#fafafa", "#6b7280", "#e5e7eb"),
+            kc("Successfully Recovered",    f"{C['recovered']:,}",          f"{C['recovery_rate_pool']*100:.1f}% of pool","#f0fdf4","#059669","#bbf7d0"),
+            kc("Net Revenue Protected",     f"${C['rev_prevented']:,.0f}",  "Cumulative static + live",                 "#f0fdf4", "#059669", "#bbf7d0"),
+        ),
+        unsafe_allow_html=True)
 
     # Failure reason breakdown
     fail_df = df[
