@@ -237,14 +237,13 @@ with st.sidebar:
     st.markdown("### 📂 Data Source")
     uploaded = st.file_uploader("Upload ecommerce CSV", type=['csv'],
                                 help="CSV is parsed → stored in SQLite DB → all views query the DB")
-    if uploaded:
+    # Only process upload if not already loaded (prevents re-run loop)
+    if uploaded and st.session_state.db_path is None:
         with st.spinner("Loading CSV into database…"):
             content = uploaded.read().decode('utf-8')
             db_path = load_csv_to_db(content)
             st.session_state.db_path = db_path
             st.session_state.df = load_from_db(db_path)
-        st.success(f"✅ {len(st.session_state.df):,} orders in DB")
-        st.rerun()
 
     if st.session_state.df is not None:
         st.success(f"✅ {len(st.session_state.df):,} orders loaded from DB")
