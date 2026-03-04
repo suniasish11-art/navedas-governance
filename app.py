@@ -15,15 +15,34 @@ from pipeline import (
     compute_agent_stats, generate_live_order,
     load_csv_to_db, load_from_db, db_exists, _DB_FILE
 )
-from governance_engine import compute_governance_health_score
-from navedas_agent import (
-    run_agent_cycle, get_agent_summary,
-    get_recent_events, get_feed_pending_count
-)
-from synthetic_feed_generator import (
-    ensure_schema, generate_order, insert_orders_batch
-)
 import sqlite3
+
+try:
+    from governance_engine import compute_governance_health_score
+except Exception:
+    def compute_governance_health_score(recovery_rate=0, residual_loss=0, ai_loss=0,
+                                        sla_compliance=0, successful_interventions=0,
+                                        total_interventions=0):
+        score = min(100.0, max(0.0, recovery_rate * 100))
+        band  = "Excellent" if score >= 90 else ("Healthy" if score >= 75 else ("Warning" if score >= 60 else "Critical"))
+        color = {"Excellent":"#059669","Healthy":"#2563eb","Warning":"#d97706","Critical":"#e11d48"}[band]
+        return {"score": round(score,1), "band": band, "color": color}
+
+try:
+    from navedas_agent import (run_agent_cycle, get_agent_summary,
+                               get_recent_events, get_feed_pending_count)
+except Exception:
+    def run_agent_cycle(db_path=None): return {"processed":0,"recovered":0,"revenue_prevented":0.0}
+    def get_agent_summary(db_path=None): return {"total":0,"recovered":0,"rev_prevented":0.0,"margin_saved":0.0,"int_cost":0.0,"net_profit":0.0}
+    def get_recent_events(db_path=None, limit=20): return []
+    def get_feed_pending_count(db_path=None): return 0
+
+try:
+    from synthetic_feed_generator import (ensure_schema, generate_order, insert_orders_batch)
+except Exception:
+    def ensure_schema(conn): pass
+    def generate_order(counter): return {}
+    def insert_orders_batch(conn, orders): pass
 
 # ── Page config ────────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -235,9 +254,6 @@ else:
 # ── Auto-refresh ───────────────────────────────────────────────────────────────
 if st.session_state.sim_running:
     st_autorefresh(interval=2000, key="live_refresh")
-else:
-    # Passive 5s refresh to pick up agent-processed orders
-    st_autorefresh(interval=5000, key="passive_refresh")
 
 # ── Sidebar ────────────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -1022,7 +1038,7 @@ with tab_agent_intel:
         sh("Navedas Agent — Processed Order Stats") +
         kr(
             kc("Total Processed",  f"{agent_db['total']:,}",                "by governance agent",  "#F1F0FF","#6C63FF","#ddd6fe","🤖"),
-            kc("Recovered",        f"{agent_db['recovered']:,}",             "successful interventions","#E6F7EEe","#059669","#bbf7d0","✅"),
+            kc("Recovered",        f"{agent_db['recovered']:,}",             "successful interventions","#E6F7EE","#059669","#bbf7d0","✅"),
             kc("Revenue Prevented",fmt_money(agent_db['rev_prevented']),     "from agent actions",   "#E6F7EE","#059669","#bbf7d0","💰"),
             kc("Margin Saved",     fmt_money(agent_db['margin_saved']),      "gross profit",         "#E8F5E9","#059669","#bbf7d0","💹"),
             kc("Net Profit",       fmt_money(agent_db['net_profit']),        "margin minus cost",    "#E6F7EE","#059669","#bbf7d0","📈"),
