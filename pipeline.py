@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import random
 import io
+import datetime
 
 US_STATES = ['CA', 'TX', 'NY', 'FL', 'IL', 'PA', 'OH', 'GA', 'NC', 'MI',
              'NJ', 'VA', 'WA', 'AZ', 'MA', 'TN', 'IN', 'MO', 'MD', 'WI']
@@ -142,6 +143,100 @@ def compute_agent_stats(df: pd.DataFrame) -> pd.DataFrame:
     ]
     df_out = pd.DataFrame(agents, columns=['Agent', 'Type', 'Recoveries', 'Margin Saved', 'Avg Latency (min)', 'Success Rate (%)'])
     return df_out.sort_values('Margin Saved', ascending=False).reset_index(drop=True)
+
+
+FAILURE_REASONS = [
+    'Customer Abandoned', 'Customer Payment Expired',
+    'Vendor SLA Delay', 'Late Detection'
+]
+
+
+def generate_dataset(n: int = 5000, seed: int = 42) -> pd.DataFrame:
+    """Generate a synthetic ecommerce governance dataset — no CSV required."""
+    rng = np.random.default_rng(seed)
+
+    # Date range: Jan 2025 – Jun 2025
+    start = datetime.date(2025, 1, 1)
+    days  = (datetime.date(2025, 6, 30) - start).days
+    order_dates = [start + datetime.timedelta(days=int(d))
+                   for d in rng.integers(0, days, n)]
+
+    qty    = rng.integers(1, 5, n).astype(float)
+    price  = rng.integers(50, 3500, n).astype(float)
+    value  = price * qty
+    margin = rng.uniform(0.20, 0.55, n)
+
+    ai_cancel    = rng.random(n) < 0.65
+    recoverable  = ai_cancel & (rng.random(n) < 0.75)
+    intervention = recoverable.copy()
+
+    tier = np.where(~ai_cancel, 'None',
+           np.where(~recoverable, 'None',
+           np.where(value < 75, 'Auto',
+           np.where((margin > 0.40) | (value > 3000), 'Human', 'Auto'))))
+
+    success_rate = np.where(tier == 'Auto', 0.85, 0.80)
+    success = intervention & (rng.random(n) < success_rate)
+
+    cost_per  = np.where(value < 75, 5, np.where(tier == 'Human', 25, 15))
+    int_cost  = np.where(intervention, cost_per, 0).astype(float)
+
+    rev_lost     = np.where(ai_cancel, value, 0).astype(float)
+    profit_lost  = np.where(ai_cancel, value * margin, 0).astype(float)
+    rev_prev     = np.where(success, value, 0).astype(float)
+    margin_saved = np.where(success, value * margin, 0).astype(float)
+    net_profit   = margin_saved - int_cost
+    residual     = np.where(intervention & ~success, value, 0).astype(float)
+    profit_after = np.where(success, 0, np.where(ai_cancel, value * margin, 0)).astype(float)
+
+    _fr = rng.choice(FAILURE_REASONS, n)
+    failure_reason = np.where(
+        intervention & ~success, _fr,
+        np.where(~ai_cancel, 'None',
+        np.where(~recoverable, 'Not Recoverable', 'None'))
+    )
+    cancel_reason = np.where(ai_cancel,
+                             rng.choice(CANCELLATION_REASONS, n), 'N/A')
+    demand = rng.choice(['High', 'Medium', 'Low'], n, p=[0.35, 0.45, 0.20])
+
+    df = pd.DataFrame({
+        'order_id':   [f'ORD-{800000+i:06d}' for i in range(n)],
+        'order_date': [d.strftime('%d-%m-%Y') for d in order_dates],
+        'demand_level': demand,
+        'unit_price':   price,
+        'quantity':     qty,
+        'total_order_value': value,
+        'margin_percent':    margin,
+        'cancellation_reason': cancel_reason,
+        'ai_cancel_flag':    ai_cancel.astype(int),
+        'recoverable_flag':  recoverable.astype(int),
+        'intervention_attempted_by_navedas': intervention.astype(int),
+        'intervention_success':  success.astype(int),
+        'recovery_rate_flag':    success.astype(int),
+        'revenue_lost_before_ai_only':          rev_lost,
+        'revenue_prevented_by_navedas':         rev_prev,
+        'avoidable_revenue_loss_after_navedas': residual,
+        'profit_lost_before_ai_only':  profit_lost,
+        'profit_lost_after_navedas':   profit_after,
+        'margin_saved_after_navedas':  margin_saved,
+        'intervention_cost':           int_cost,
+        'net_profit_impact_due_to_navedas': net_profit,
+        'intervention_failure_reason': failure_reason,
+    })
+
+    # Same enrichment as load_data
+    df['customer_state'] = rng.choice(US_STATES, n)
+    df['payment_auth_status'] = df.apply(_payment_auth, axis=1)
+    df['shopify_id']   = df['order_id'].str.replace('ORD-', '#', regex=False)
+    df['governance_tier'] = tier
+    df['refund_type']  = df.apply(_refund_type, axis=1)
+    df['order_date']   = pd.to_datetime(df['order_date'], format='%d-%m-%Y')
+    df['month']        = df['order_date'].dt.to_period('M').astype(str)
+
+    for col in INT_COLS:
+        if col in df.columns:
+            df[col] = df[col].astype(int)
+    return df
 
 
 def generate_live_order(counter: int) -> dict:

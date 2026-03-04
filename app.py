@@ -12,8 +12,12 @@ from streamlit_autorefresh import st_autorefresh
 import os
 from pipeline import (
     load_data, compute_kpis, compute_time_series,
-    compute_agent_stats, generate_live_order
+    compute_agent_stats, generate_live_order, generate_dataset
 )
+
+@st.cache_data(show_spinner="Generating 5,000-order dataset…")
+def get_dataset() -> "pd.DataFrame":
+    return generate_dataset(5000)
 
 # ── Page config ────────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -198,7 +202,6 @@ BASE_LAYOUT = dict(
 )
 
 # ── Session state init ─────────────────────────────────────────────────────────
-if 'df' not in st.session_state:           st.session_state.df = None
 if 'live_orders' not in st.session_state:  st.session_state.live_orders = []
 if 'sim_running' not in st.session_state:  st.session_state.sim_running = False
 if 'live_counter' not in st.session_state: st.session_state.live_counter = 800000
@@ -226,35 +229,8 @@ with st.sidebar:
     st.markdown("**Governance Intelligence Platform**")
     st.markdown("---")
 
-    st.markdown("### 📂 Data Source")
-    data_source = st.radio("", ["Upload CSV", "Use bundled data"], label_visibility="collapsed")
-
-    df = None
-    if data_source == "Upload CSV":
-        uploaded = st.file_uploader("Upload ecommerce CSV", type=['csv'])
-        if uploaded:
-            content = uploaded.read().decode('utf-8')
-            st.session_state.df = load_data(content)
-            st.success(f"✅ {len(st.session_state.df):,} orders loaded")
-    else:
-        local_paths = [
-            r"C:\Users\sunit\ecommerce_ production_dataset_5000_rows.csv",
-            "ecommerce_ production_dataset_5000_rows.csv",
-            "data/ecommerce_production.csv"
-        ]
-        for p in local_paths:
-            if os.path.exists(p):
-                if st.session_state.df is None:
-                    with open(p, 'r', encoding='utf-8') as f:
-                        content = f.read()
-                    st.session_state.df = load_data(content)
-                break
-        if st.session_state.df is not None:
-            st.success(f"✅ {len(st.session_state.df):,} orders loaded")
-        else:
-            st.info("📎 Upload your CSV file above")
-
-    df = st.session_state.df
+    st.markdown("### 📊 Dataset")
+    st.success("✅ 5,000 orders — auto-generated")
 
     st.markdown("---")
     st.markdown("### ⚡ Live Simulation")
@@ -298,25 +274,8 @@ with st.sidebar:
     st.markdown("*Navedas GIP v1.0*  \n*Production-grade · Client-shareable*")
 
 
-# ── No data state ──────────────────────────────────────────────────────────────
-if df is None:
-    st.markdown("""
-    <div style='text-align:center; padding: 80px 20px;'>
-      <div style='font-size: 64px; margin-bottom: 16px;'>🏛️</div>
-      <h1 style='color:#1e293b; font-size:28px; margin-bottom:8px;'>Navedas Governance Intelligence Platform</h1>
-      <p style='color:#64748b; font-size:16px; margin-bottom: 32px;'>
-        Real-Time AI Order Governance Engine · US/Shopify Aligned
-      </p>
-      <div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:32px; max-width:500px; margin:0 auto; box-shadow:0 4px 16px rgba(124,58,237,0.08);'>
-        <p style='color:#475569;'>👈 Upload your <strong style='color:#1e293b;'>ecommerce CSV</strong> in the sidebar to begin</p>
-        <p style='color:#94a3b8; font-size:13px; margin-top:12px;'>
-          Or if running locally, the dataset auto-loads from your machine.
-        </p>
-      </div>
-    </div>
-    """, unsafe_allow_html=True)
-    st.stop()
-
+# ── Load dataset (cached, no CSV needed) ──────────────────────────────────────
+df = get_dataset()
 
 # ── Compute static KPIs ────────────────────────────────────────────────────────
 kpis = compute_kpis(df)
