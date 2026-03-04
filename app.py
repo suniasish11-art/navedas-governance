@@ -201,12 +201,21 @@ BASE_LAYOUT = dict(
 # ── Session state init ─────────────────────────────────────────────────────────
 if 'df' not in st.session_state:           st.session_state.df = None
 if 'db_path' not in st.session_state:
-    # Auto-load from DB if it already exists on disk (e.g. local dev)
     if db_exists(_DB_FILE):
+        # DB already on disk from this session
         st.session_state.db_path = _DB_FILE
         st.session_state.df = load_from_db(_DB_FILE)
     else:
-        st.session_state.db_path = None
+        # Auto-seed from bundled data.csv (no upload required)
+        _bundled = os.path.join(os.path.dirname(__file__), 'data.csv')
+        if os.path.exists(_bundled):
+            with open(_bundled, 'r', encoding='utf-8') as _f:
+                _content = _f.read()
+            _db = load_csv_to_db(_content)
+            st.session_state.db_path = _db
+            st.session_state.df = load_from_db(_db)
+        else:
+            st.session_state.db_path = None
 if 'live_orders' not in st.session_state:  st.session_state.live_orders = []
 if 'sim_running' not in st.session_state:  st.session_state.sim_running = False
 if 'live_counter' not in st.session_state: st.session_state.live_counter = 800000
@@ -235,20 +244,19 @@ with st.sidebar:
     st.markdown("---")
 
     st.markdown("### 📂 Data Source")
-    uploaded = st.file_uploader("Upload ecommerce CSV", type=['csv'],
-                                help="CSV is parsed → stored in SQLite DB → all views query the DB")
-    # Only process upload if not already loaded (prevents re-run loop)
-    if uploaded and st.session_state.db_path is None:
-        with st.spinner("Loading CSV into database…"):
-            content = uploaded.read().decode('utf-8')
-            db_path = load_csv_to_db(content)
-            st.session_state.db_path = db_path
-            st.session_state.df = load_from_db(db_path)
-
     if st.session_state.df is not None:
         st.success(f"✅ {len(st.session_state.df):,} orders loaded from DB")
-    else:
-        st.info("📎 Upload CSV to initialise the database")
+
+    with st.expander("🔄 Replace data (optional)"):
+        uploaded = st.file_uploader("Upload new CSV", type=['csv'],
+                                    help="Replaces the current DB with fresh data")
+        if uploaded:
+            with st.spinner("Loading CSV into database…"):
+                content = uploaded.read().decode('utf-8')
+                db_path = load_csv_to_db(content)
+                st.session_state.db_path = db_path
+                st.session_state.df = load_from_db(db_path)
+            st.success(f"✅ {len(st.session_state.df):,} orders loaded")
 
     st.markdown("---")
     st.markdown("### ⚡ Live Simulation")
