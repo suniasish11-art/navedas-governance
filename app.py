@@ -925,8 +925,8 @@ with tab_risk:
                 text=fail_df['count'], textposition='outside',
                 textfont=dict(color='#64748b', size=11)
             ))
-            fig_fail.update_layout(**CHART_LAYOUT, height=280, showlegend=False,
-                                   margin=dict(l=40, r=55, t=20, b=20))
+            fig_fail.update_layout(**CHART_LAYOUT, height=280, showlegend=False)
+            fig_fail.update_layout(margin=dict(l=40, r=55, t=20, b=20))
             st.plotly_chart(fig_fail, use_container_width=True)
 
     with col_fi:
