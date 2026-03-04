@@ -1125,75 +1125,40 @@ with tab_agent_intel:
 with tab_arch:
     st.markdown(sh("System Architecture — Navedas Governance Intelligence Platform"), unsafe_allow_html=True)
 
-    # Architecture diagram
-    st.markdown("""
-<div style='background:#ffffff;border:1px solid #e5e7eb;border-radius:16px;padding:32px 36px;
-            font-family:Inter,sans-serif;'>
-
-  <div style='display:flex;gap:0;align-items:stretch;'>
-
-    <!-- Column 1 -->
-    <div style='flex:1;text-align:center;'>
-      <div style='background:#E6F7EE;border:2px solid #bbf7d0;border-radius:12px;padding:18px;'>
-        <div style='font-size:24px;'>📦</div>
-        <div style='font-size:13px;font-weight:800;color:#059669;margin-top:6px;'>Synthetic Order Feed</div>
-        <div style='font-size:11px;color:#6b7280;margin-top:4px;'>synthetic_feed_generator.py</div>
-        <div style='font-size:11px;color:#374151;margin-top:8px;line-height:1.6;'>
-          Inserts ecommerce orders into <b>orders_feed</b> table every few seconds
-        </div>
-      </div>
-      <div style='font-size:24px;color:#6C63FF;margin:8px 0;'>↓</div>
-    </div>
-
-    <div style='width:24px;'></div>
-
-    <!-- Column 2 -->
-    <div style='flex:1;text-align:center;'>
-      <div style='background:#F1F0FF;border:2px solid #ddd6fe;border-radius:12px;padding:18px;'>
-        <div style='font-size:24px;'>🤖</div>
-        <div style='font-size:13px;font-weight:800;color:#6C63FF;margin-top:6px;'>Navedas Governance Agent</div>
-        <div style='font-size:11px;color:#6b7280;margin-top:4px;'>navedas_agent.py</div>
-        <div style='font-size:11px;color:#374151;margin-top:8px;line-height:1.6;'>
-          Polls feed every 15s · Applies 4 governance rules · Writes intervention results
-        </div>
-      </div>
-      <div style='font-size:24px;color:#6C63FF;margin:8px 0;'>↓</div>
-    </div>
-
-    <div style='width:24px;'></div>
-
-    <!-- Column 3 -->
-    <div style='flex:1;text-align:center;'>
-      <div style='background:#fffbeb;border:2px solid #fde68a;border-radius:12px;padding:18px;'>
-        <div style='font-size:24px;'>🗄️</div>
-        <div style='font-size:13px;font-weight:800;color:#d97706;margin-top:6px;'>Intervention Database</div>
-        <div style='font-size:11px;color:#6b7280;margin-top:4px;'>SQLite (governance.db)</div>
-        <div style='font-size:11px;color:#374151;margin-top:8px;line-height:1.6;'>
-          <b>orders_feed</b> · <b>orders_processed</b> · <b>intervention_log</b> · <b>orders</b>
-        </div>
-      </div>
-      <div style='font-size:24px;color:#6C63FF;margin:8px 0;'>↓</div>
-    </div>
-
-    <div style='width:24px;'></div>
-
-    <!-- Column 4 -->
-    <div style='flex:1;text-align:center;'>
-      <div style='background:#FFE6E6;border:2px solid #fecdd3;border-radius:12px;padding:18px;'>
-        <div style='font-size:24px;'>📊</div>
-        <div style='font-size:13px;font-weight:800;color:#e11d48;margin-top:6px;'>Governance Dashboard</div>
-        <div style='font-size:11px;color:#6b7280;margin-top:4px;'>app.py (Streamlit)</div>
-        <div style='font-size:11px;color:#374151;margin-top:8px;line-height:1.6;'>
-          Visualization only · Reads DB · Auto-refreshes every 5s · SaaS UI
-        </div>
-      </div>
-    </div>
-
-  </div>
-
-</div>
-""", unsafe_allow_html=True)
-
+    # Architecture diagram — using st.columns to avoid HTML comment parsing bugs
+    arch_cols = st.columns(4)
+    arch_nodes = [
+        ("📦", "Synthetic Order Feed",      "synthetic_feed_generator.py",
+         "Inserts ecommerce orders into orders_feed table every few seconds",
+         "#E6F7EE", "#bbf7d0", "#059669"),
+        ("🤖", "Navedas Governance Agent",  "navedas_agent.py",
+         "Polls feed every 15s · Applies 4 governance rules · Writes results",
+         "#F1F0FF", "#ddd6fe", "#6C63FF"),
+        ("🗄️", "Intervention Database",     "SQLite (governance.db)",
+         "orders_feed · orders_processed · intervention_log · orders",
+         "#fffbeb", "#fde68a", "#d97706"),
+        ("📊", "Governance Dashboard",      "app.py (Streamlit)",
+         "Visualization only · Reads DB · SaaS UI",
+         "#FFE6E6", "#fecdd3", "#e11d48"),
+    ]
+    for col, (icon, title, subtitle, desc, bg, border, color) in zip(arch_cols, arch_nodes):
+        with col:
+            st.markdown(
+                f"<div style='background:{bg};border:2px solid {border};border-radius:12px;"
+                f"padding:18px;text-align:center;height:160px;'>"
+                f"<div style='font-size:24px;'>{icon}</div>"
+                f"<div style='font-size:12px;font-weight:800;color:{color};margin-top:6px;'>{title}</div>"
+                f"<div style='font-size:10px;color:#6b7280;margin-top:3px;'>{subtitle}</div>"
+                f"<div style='font-size:10px;color:#374151;margin-top:8px;line-height:1.5;'>{desc}</div>"
+                f"</div>",
+                unsafe_allow_html=True
+            )
+    st.markdown(
+        "<div style='text-align:center;font-size:13px;color:#6C63FF;letter-spacing:.15em;"
+        "margin:12px 0;font-weight:700;'>&#8595;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
+        "&#8595;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#8595;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#8595;</div>",
+        unsafe_allow_html=True
+    )
     st.markdown("<br>", unsafe_allow_html=True)
 
     # DB Schema
