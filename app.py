@@ -568,7 +568,13 @@ with tab_governance:
             yaxis=dict(title='Margin Saved ($)', gridcolor='#e2e8f0', showgrid=True, color='#64748b'),
             yaxis2=dict(title='ROI (x)', overlaying='y', side='right', gridcolor='#e2e8f0', color='#64748b'),
             xaxis=dict(gridcolor='#e2e8f0', showgrid=True, color='#64748b'),
-            legend=dict(x=0, y=1, bgcolor='rgba(255,255,255,0)'),
+            legend=dict(
+                orientation='h',
+                yanchor='bottom', y=1.04,
+                xanchor='center', x=0.5,
+                bgcolor='rgba(255,255,255,0)',
+                font=dict(size=11, color='#374151'),
+            ),
         )
         st.plotly_chart(fig_ts, use_container_width=True)
 
@@ -581,8 +587,16 @@ with tab_governance:
                                  name='Margin Saved', marker_color='#818cf8', opacity=0.8))
         fig_bar.add_trace(go.Bar(x=ts['month_label'], y=ts['int_cost'],
                                  name='Int. Cost', marker_color='#f59e0b', opacity=0.8))
-        fig_bar.update_layout(**CHART_LAYOUT, height=300, barmode='group',
-                              legend=dict(x=0, y=1, bgcolor='rgba(255,255,255,0)'))
+        fig_bar.update_layout(**CHART_LAYOUT, height=320, barmode='group',
+                              legend=dict(
+                                  orientation='h',
+                                  yanchor='bottom', y=1.04,
+                                  xanchor='center', x=0.5,
+                                  bgcolor='rgba(255,255,255,0)',
+                                  font=dict(size=11, color='#374151'),
+                                  traceorder='normal',
+                                  itemwidth=40,
+                              ))
         st.plotly_chart(fig_bar, use_container_width=True)
 
     # Recovery funnel + Routing logic
