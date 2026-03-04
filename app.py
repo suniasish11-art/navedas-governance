@@ -245,6 +245,10 @@ if 'sim_running' not in st.session_state:  st.session_state.sim_running = False
 if 'live_counter' not in st.session_state: st.session_state.live_counter = 800000
 if 'feed_counter'  not in st.session_state: st.session_state.feed_counter  = 0
 if 'auto_feed'     not in st.session_state: st.session_state.auto_feed     = False
+if 'auto_agent'    not in st.session_state: st.session_state.auto_agent    = False
+if 'auto_agent_last_run_ts' not in st.session_state: st.session_state.auto_agent_last_run_ts = None
+if 'auto_agent_stats' not in st.session_state:
+    st.session_state.auto_agent_stats = {'fed': 0, 'processed': 0, 'cycles': 0, 'last_time': '—'}
 if 'chat_history'  not in st.session_state: st.session_state.chat_history  = []
 _LIVE_DEFAULTS = {
     'count': 0, 'rev_prevented': 0, 'margin_saved': 0,
@@ -262,6 +266,32 @@ else:
 # ── Auto-refresh ───────────────────────────────────────────────────────────────
 if st.session_state.sim_running:
     st_autorefresh(interval=2000, key="live_refresh")
+if st.session_state.auto_agent:
+    st_autorefresh(interval=30000, key="agent_refresh")
+
+# ── Auto-Agent: Feed + Process on each refresh cycle ───────────────────────────
+if st.session_state.auto_agent:
+    import datetime as _dt
+    _now = _dt.datetime.now()
+    _last = st.session_state.auto_agent_last_run_ts
+    _should_run = (_last is None) or ((_now - _last).total_seconds() >= 25)
+    if _should_run:
+        try:
+            _conn = sqlite3.connect(_DB_FILE)
+            ensure_schema(_conn)
+            st.session_state.feed_counter += 1
+            _batch = [generate_order(st.session_state.feed_counter * 100 + _i) for _i in range(5)]
+            insert_orders_batch(_conn, _batch)
+            _conn.close()
+            _summary = run_agent_cycle(_DB_FILE)
+            _stats = st.session_state.auto_agent_stats
+            _stats['fed']       += 5
+            _stats['processed'] += _summary.get('processed', 0)
+            _stats['cycles']    += 1
+            _stats['last_time']  = _now.strftime('%H:%M:%S')
+            st.session_state.auto_agent_last_run_ts = _now
+        except Exception:
+            pass
 
 # ── Sidebar ────────────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -352,21 +382,23 @@ with st.sidebar:
             except Exception as e:
                 st.error(str(e))
 
-    # Auto-feed scheduler toggle
-    auto_feed = st.toggle("🔄 Auto Feed (every refresh)", value=st.session_state.auto_feed)
-    st.session_state.auto_feed = auto_feed
-    if auto_feed:
-        st.markdown("<div style='font-size:11px;color:#059669;'>Feed auto-generates on each sim cycle</div>",
-                    unsafe_allow_html=True)
-        try:
-            conn = sqlite3.connect(_DB_FILE)
-            ensure_schema(conn)
-            st.session_state.feed_counter += 1
-            batch = [generate_order(st.session_state.feed_counter * 100 + i) for i in range(5)]
-            insert_orders_batch(conn, batch)
-            conn.close()
-        except Exception:
-            pass
+    st.markdown("---")
+    st.markdown("#### ⏱ Scheduled Agent")
+    auto_agent = st.toggle("Run automatically every 30s", value=st.session_state.auto_agent)
+    st.session_state.auto_agent = auto_agent
+    _as = st.session_state.auto_agent_stats
+    if auto_agent:
+        st.markdown(
+            f"<div style='font-size:11px;color:#059669;margin-top:4px;'>"
+            f"<b>LIVE</b> — Cycle {_as['cycles']} &nbsp;·&nbsp; "
+            f"Fed {_as['fed']} orders<br>"
+            f"Processed {_as['processed']} &nbsp;·&nbsp; Last: {_as['last_time']}"
+            f"</div>", unsafe_allow_html=True)
+    else:
+        st.markdown(
+            "<div style='font-size:11px;color:#9ca3af;'>"
+            "Toggle on to auto-feed &amp; process orders without any button clicks"
+            "</div>", unsafe_allow_html=True)
 
     st.markdown("---")
 
