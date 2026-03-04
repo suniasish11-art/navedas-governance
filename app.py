@@ -292,13 +292,21 @@ with st.sidebar:
         st.session_state.live_orders = st.session_state.live_orders[:50]
 
     st.markdown("---")
-    st.markdown("### 🇺🇸 System Info")
-    st.markdown("- Currency: **USD ($)**")
-    st.markdown("- Timezone: **EST (New York)**")
-    st.markdown("- Format: **Shopify-aligned**")
-    st.markdown("- DB: **SQLite (seeded)**")
+    st.markdown("""
+<div style='font-family:Inter,sans-serif;background:#f8f7ff;border:1px solid #ede9fe;
+            border-radius:10px;padding:12px 14px;margin-top:4px;'>
+  <div style='font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+              color:#7c3aed;margin-bottom:8px;'>🇺🇸 System Info</div>
+  <div style='font-size:12px;color:#374151;line-height:1.9;'>
+    <span style='color:#9ca3af;'>Currency</span>&nbsp;&nbsp;<strong>USD ($)</strong><br>
+    <span style='color:#9ca3af;'>Timezone</span>&nbsp;&nbsp;<strong>EST (New York)</strong><br>
+    <span style='color:#9ca3af;'>Format</span>&nbsp;&nbsp;&nbsp;&nbsp;<strong>Shopify-aligned</strong><br>
+    <span style='color:#9ca3af;'>Database</span>&nbsp;&nbsp;<strong>SQLite (seeded)</strong>
+  </div>
+</div>
+""", unsafe_allow_html=True)
     st.markdown("---")
-    st.markdown("*Navedas GIP v1.0*  \n*Production-grade · Client-shareable*")
+    st.markdown("<div style='font-family:Inter,sans-serif;font-size:11px;color:#9ca3af;text-align:center;'>Navedas GIP v1.0 · Production-grade</div>", unsafe_allow_html=True)
 
 
 # ── Load from DB (session-cached) ─────────────────────────────────────────────
