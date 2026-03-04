@@ -44,11 +44,12 @@ def _check_password() -> bool:
     st.markdown("""
     <div style='display:flex; justify-content:center; align-items:center;
                 min-height:80vh; flex-direction:column;'>
-      <div style='background:#111827; border:1px solid #1f2937; border-radius:20px;
-                  padding:48px 56px; max-width:420px; width:100%; text-align:center;'>
+      <div style='background:#ffffff; border:2px solid #7c3aed; border-radius:20px;
+                  padding:48px 56px; max-width:420px; width:100%; text-align:center;
+                  box-shadow: 0 20px 60px rgba(124,58,237,0.12);'>
         <div style='font-size:52px; margin-bottom:12px;'>🏛️</div>
-        <h2 style='color:white; margin:0 0 4px;'>Navedas GIP</h2>
-        <p style='color:#6b7280; font-size:13px; margin-bottom:32px;'>
+        <h2 style='color:#1e293b; margin:0 0 4px;'>Navedas GIP</h2>
+        <p style='color:#64748b; font-size:13px; margin-bottom:32px;'>
           Governance Intelligence Platform<br>Restricted Access
         </p>
       </div>
@@ -80,35 +81,89 @@ st.markdown("""
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
   html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
-  .main { background: #0a0f1e; }
-  .stMetric { background: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: 16px !important; }
-  .stMetric label { color: #6b7280 !important; font-size: 11px !important; text-transform: uppercase; letter-spacing: 0.05em; }
-  .stMetric [data-testid="stMetricValue"] { color: white !important; font-size: 22px !important; font-weight: 700 !important; }
+
+  /* ── Light theme base ── */
+  .main { background: #f8fafc !important; }
+  section[data-testid="stSidebar"] { background: #ffffff !important; border-right: 1px solid #e2e8f0 !important; }
+  section[data-testid="stSidebar"] * { color: #1e293b !important; }
+  .stApp { background: #f8fafc; }
+
+  /* ── Metric cards ── */
+  .stMetric {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 18px !important;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    transition: box-shadow 0.2s;
+  }
+  .stMetric:hover { box-shadow: 0 4px 16px rgba(124,58,237,0.10); }
+  .stMetric label { color: #64748b !important; font-size: 11px !important; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600 !important; }
+  .stMetric [data-testid="stMetricValue"] { color: #1e293b !important; font-size: 22px !important; font-weight: 700 !important; }
+  .stMetric [data-testid="stMetricDelta"] { font-size: 11px !important; }
   div[data-testid="stHorizontalBlock"] { gap: 12px; }
-  .section-header { color: #6b7280; font-size: 11px; font-weight: 600; text-transform: uppercase;
-                    letter-spacing: 0.08em; margin-bottom: 12px; padding-bottom: 8px;
-                    border-bottom: 1px solid #1f2937; }
-  .stTabs [data-baseweb="tab-list"] { gap: 8px; background: #111827; border-radius: 12px; padding: 4px; }
-  .stTabs [data-baseweb="tab"] { border-radius: 8px; color: #6b7280 !important; font-size: 13px; padding: 8px 16px; }
-  .stTabs [aria-selected="true"] { background: #1f2937 !important; color: white !important; }
-  .live-badge { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
-                background: #10b981; animation: pulse 1.5s infinite; margin-right: 6px; }
+
+  /* ── Section headers ── */
+  .section-header {
+    color: #7c3aed;
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.09em; margin-bottom: 14px; padding-bottom: 8px;
+    border-bottom: 2px solid #ede9fe;
+  }
+
+  /* ── Tabs ── */
+  .stTabs [data-baseweb="tab-list"] {
+    gap: 6px; background: #f1f5f9; border-radius: 12px; padding: 4px;
+    border: 1px solid #e2e8f0;
+  }
+  .stTabs [data-baseweb="tab"] { border-radius: 9px; color: #64748b !important; font-size: 13px; font-weight: 500; padding: 8px 18px; }
+  .stTabs [aria-selected="true"] { background: #ffffff !important; color: #7c3aed !important; box-shadow: 0 1px 4px rgba(0,0,0,0.10); font-weight: 600 !important; }
+  .stTabs [data-baseweb="tab-panel"] { padding-top: 16px; }
+
+  /* ── Dividers & HR ── */
+  hr { border-color: #e2e8f0 !important; }
+
+  /* ── Headings ── */
+  h1, h2, h3 { color: #1e293b !important; }
+
+  /* ── Dataframe ── */
+  .stDataFrame { border-radius: 10px; border: 1px solid #e2e8f0 !important; overflow: hidden; }
+
+  /* ── Expander ── */
+  .streamlit-expanderHeader { color: #1e293b !important; font-weight: 500; }
+
+  /* ── Buttons ── */
+  .stButton button[kind="primary"] { background: #7c3aed !important; border-color: #7c3aed !important; color: white !important; border-radius: 8px; }
+  .stButton button { border-radius: 8px; border: 1px solid #e2e8f0; color: #374151; }
+
+  /* ── Form inputs ── */
+  .stTextInput input, .stSelectbox select, .stNumberInput input { background: #ffffff !important; border: 1px solid #d1d5db !important; border-radius: 8px !important; color: #1e293b !important; }
+
+  /* ── Live badge ── */
+  .live-badge {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: #10b981; animation: pulse 1.5s infinite; margin-right: 6px;
+  }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* ── Purple top-border accent (branding) ── */
+  .main > div:first-child { border-top: 3px solid #7c3aed; }
+
   footer { visibility: hidden; }
   #MainMenu { visibility: hidden; }
 </style>
 """, unsafe_allow_html=True)
 
 CHART_LAYOUT = dict(
-    paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-    font=dict(color='#9ca3af', family='Inter'),
+    paper_bgcolor='rgba(255,255,255,0)', plot_bgcolor='rgba(248,250,252,1)',
+    font=dict(color='#475569', family='Inter'),
     margin=dict(l=40, r=20, t=30, b=40),
-    xaxis=dict(gridcolor='#1f2937', showgrid=True),
-    yaxis=dict(gridcolor='#1f2937', showgrid=True),
+    xaxis=dict(gridcolor='#e2e8f0', showgrid=True, color='#64748b'),
+    yaxis=dict(gridcolor='#e2e8f0', showgrid=True, color='#64748b'),
 )
 BASE_LAYOUT = dict(
-    paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-    font=dict(color='#9ca3af', family='Inter'),
+    paper_bgcolor='rgba(255,255,255,0)', plot_bgcolor='rgba(248,250,252,1)',
+    font=dict(color='#475569', family='Inter'),
 )
 
 # ── Session state init ─────────────────────────────────────────────────────────
@@ -217,13 +272,13 @@ if df is None:
     st.markdown("""
     <div style='text-align:center; padding: 80px 20px;'>
       <div style='font-size: 64px; margin-bottom: 16px;'>🏛️</div>
-      <h1 style='color:white; font-size:28px; margin-bottom:8px;'>Navedas Governance Intelligence Platform</h1>
-      <p style='color:#6b7280; font-size:16px; margin-bottom: 32px;'>
+      <h1 style='color:#1e293b; font-size:28px; margin-bottom:8px;'>Navedas Governance Intelligence Platform</h1>
+      <p style='color:#64748b; font-size:16px; margin-bottom: 32px;'>
         Real-Time AI Order Governance Engine · US/Shopify Aligned
       </p>
-      <div style='background:#111827; border:1px solid #1f2937; border-radius:16px; padding:32px; max-width:500px; margin:0 auto;'>
-        <p style='color:#9ca3af;'>👈 Upload your <strong style='color:white;'>ecommerce CSV</strong> in the sidebar to begin</p>
-        <p style='color:#6b7280; font-size:13px; margin-top:12px;'>
+      <div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:32px; max-width:500px; margin:0 auto; box-shadow:0 4px 16px rgba(124,58,237,0.08);'>
+        <p style='color:#475569;'>👈 Upload your <strong style='color:#1e293b;'>ecommerce CSV</strong> in the sidebar to begin</p>
+        <p style='color:#94a3b8; font-size:13px; margin-top:12px;'>
           Or if running locally, the dataset auto-loads from your machine.
         </p>
       </div>
@@ -268,7 +323,7 @@ col_h1, col_h2, col_h3 = st.columns([3, 1, 1])
 with col_h1:
     st.markdown("## 🏛️ Navedas Governance Intelligence Platform")
     st.markdown(
-        f"<p style='color:#6b7280; margin-top:-8px;'>"
+        f"<p style='color:#64748b; margin-top:-8px;'>"
         f"Real-Time AI Order Governance · {C['total']:,} orders · US/Shopify Aligned"
         f"</p>", unsafe_allow_html=True)
 with col_h2:
@@ -349,10 +404,10 @@ with tab_overview:
             measure=["absolute", "relative", "total", "relative", "relative", "total"],
             x=["Baseline", "AI Loss", "After AI Only", "Gov Recovery", "Residual Loss", "Net Revenue"],
             y=[baseline, -kpis['revenue_lost_ai'], 0, C['rev_prevented'], -C['residual_loss'], 0],
-            connector={"line": {"color": "#374151"}},
+            connector={"line": {"color": "#e2e8f0"}},
             decreasing={"marker": {"color": "#f43f5e"}},
             increasing={"marker": {"color": "#10b981"}},
-            totals={"marker": {"color": "#38bdf8"}},
+            totals={"marker": {"color": "#6366f1"}},
             text=[f"${v/1e6:.2f}M" if abs(v) > 1e6 else f"${v:,.0f}" for v in vals],
             textposition="inside", insidetextanchor="middle",
             textfont=dict(color="white", size=12, family="Inter"),
@@ -360,9 +415,9 @@ with tab_overview:
         fig_wf.update_layout(
             **BASE_LAYOUT, height=360, showlegend=False,
             margin=dict(l=40, r=20, t=20, b=60),
-            xaxis=dict(gridcolor='#1f2937', tickfont=dict(color='#9ca3af', size=11)),
-            yaxis=dict(gridcolor='#1f2937', showgrid=True,
-                       tickformat='$,.0f', tickfont=dict(color='#9ca3af')),
+            xaxis=dict(gridcolor='#e2e8f0', tickfont=dict(color='#64748b', size=11)),
+            yaxis=dict(gridcolor='#e2e8f0', showgrid=True,
+                       tickformat='$,.0f', tickfont=dict(color='#64748b')),
         )
         st.plotly_chart(fig_wf, use_container_width=True)
 
@@ -372,30 +427,30 @@ with tab_overview:
             mode="gauge+number+delta",
             value=C['roi'],
             delta={"reference": 10, "valueformat": ".1f", "suffix": "x"},
-            number={"suffix": "x", "font": {"size": 32, "color": "#10b981"}},
+            number={"suffix": "x", "font": {"size": 32, "color": "#7c3aed"}},
             gauge={
-                "axis": {"range": [0, 200], "tickcolor": "#374151"},
-                "bar": {"color": "#10b981", "thickness": 0.3},
-                "bgcolor": "#111827", "borderwidth": 0,
+                "axis": {"range": [0, 200], "tickcolor": "#94a3b8"},
+                "bar": {"color": "#7c3aed", "thickness": 0.3},
+                "bgcolor": "#f8fafc", "borderwidth": 0,
                 "steps": [
-                    {"range": [0,  10], "color": "#1f2937"},
-                    {"range": [10, 50], "color": "#1a2e1a"},
-                    {"range": [50,200], "color": "#0d2b1d"},
+                    {"range": [0,  10], "color": "#fef3c7"},
+                    {"range": [10, 50], "color": "#d1fae5"},
+                    {"range": [50,200], "color": "#ede9fe"},
                 ],
                 "threshold": {"line": {"color": "#f59e0b", "width": 3}, "value": 10}
             }
         ))
         fig_g.add_annotation(
-            text=f"${C['margin_saved']:,.0f}<br><span style='font-size:10px;color:#6b7280'>Margin Saved</span>",
+            text=f"${C['margin_saved']:,.0f}<br><span style='font-size:10px;color:#64748b'>Margin Saved</span>",
             xref="paper", yref="paper", x=0.25, y=0.1, showarrow=False,
-            font=dict(color='#10b981', size=11), align='center')
+            font=dict(color='#059669', size=11), align='center')
         fig_g.add_annotation(
-            text=f"${C['int_cost']:,.0f}<br><span style='font-size:10px;color:#6b7280'>Int. Cost</span>",
+            text=f"${C['int_cost']:,.0f}<br><span style='font-size:10px;color:#64748b'>Int. Cost</span>",
             xref="paper", yref="paper", x=0.75, y=0.1, showarrow=False,
             font=dict(color='#f59e0b', size=11), align='center')
-        fig_g.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+        fig_g.update_layout(paper_bgcolor='rgba(255,255,255,0)', plot_bgcolor='rgba(248,250,252,1)',
                             height=320, margin=dict(l=20, r=20, t=30, b=10),
-                            font=dict(color='#9ca3af'))
+                            font=dict(color='#475569'))
         st.plotly_chart(fig_g, use_container_width=True)
 
     # ── Operational ────────────────────────────────────────────────────────────
@@ -436,10 +491,10 @@ with tab_governance:
                                     marker=dict(color='#fbbf24', size=6)))
         fig_ts.update_layout(
             **BASE_LAYOUT, height=300,
-            yaxis=dict(title='Margin Saved ($)', gridcolor='#1f2937', showgrid=True),
-            yaxis2=dict(title='ROI (x)', overlaying='y', side='right', gridcolor='#1f2937'),
-            xaxis=dict(gridcolor='#1f2937', showgrid=True),
-            legend=dict(x=0, y=1, bgcolor='rgba(0,0,0,0)'),
+            yaxis=dict(title='Margin Saved ($)', gridcolor='#e2e8f0', showgrid=True, color='#64748b'),
+            yaxis2=dict(title='ROI (x)', overlaying='y', side='right', gridcolor='#e2e8f0', color='#64748b'),
+            xaxis=dict(gridcolor='#e2e8f0', showgrid=True, color='#64748b'),
+            legend=dict(x=0, y=1, bgcolor='rgba(255,255,255,0)'),
         )
         st.plotly_chart(fig_ts, use_container_width=True)
 
@@ -453,7 +508,7 @@ with tab_governance:
         fig_bar.add_trace(go.Bar(x=ts['month_label'], y=ts['int_cost'],
                                  name='Int. Cost', marker_color='#f59e0b', opacity=0.8))
         fig_bar.update_layout(**CHART_LAYOUT, height=300, barmode='group',
-                              legend=dict(x=0, y=1, bgcolor='rgba(0,0,0,0)'))
+                              legend=dict(x=0, y=1, bgcolor='rgba(255,255,255,0)'))
         st.plotly_chart(fig_bar, use_container_width=True)
 
     # Recovery funnel + Routing logic
@@ -469,11 +524,11 @@ with tab_governance:
             y=funnel_data['Stage'], x=funnel_data['Count'],
             textinfo="value+percent initial",
             marker_color=funnel_data['Color'],
-            connector={"line": {"color": "#374151", "width": 2}}
+            connector={"line": {"color": "#e2e8f0", "width": 2}}
         ))
-        fig_funnel.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+        fig_funnel.update_layout(paper_bgcolor='rgba(255,255,255,0)', plot_bgcolor='rgba(248,250,252,1)',
                                   height=280, margin=dict(l=20, r=20, t=10, b=10),
-                                  font=dict(color='#9ca3af'))
+                                  font=dict(color='#475569'))
         st.plotly_chart(fig_funnel, use_container_width=True)
 
     with col_r:
@@ -500,11 +555,11 @@ with tab_governance:
         orders=('order_id', 'count')
     ).reset_index()
     fig_pie = px.pie(by_reason, values='net_profit', names='cancellation_reason',
-                     color_discrete_sequence=['#10b981', '#38bdf8', '#818cf8', '#f59e0b'],
+                     color_discrete_sequence=['#10b981', '#6366f1', '#f43f5e', '#f59e0b'],
                      hole=0.4)
-    fig_pie.update_layout(paper_bgcolor='rgba(0,0,0,0)', height=300,
-                          font=dict(color='#9ca3af'), showlegend=True,
-                          legend=dict(x=1, y=0.5, bgcolor='rgba(0,0,0,0)'),
+    fig_pie.update_layout(paper_bgcolor='rgba(255,255,255,0)', height=300,
+                          font=dict(color='#475569'), showlegend=True,
+                          legend=dict(x=1, y=0.5, bgcolor='rgba(255,255,255,0)'),
                           margin=dict(l=20, r=20, t=10, b=10))
     fig_pie.update_traces(textinfo='percent+label', textfont_color='white')
     st.plotly_chart(fig_pie, use_container_width=True)
@@ -518,12 +573,12 @@ with tab_agents:
 
     # Leaderboard bar chart (static proportions, updated total counts)
     fig_lb = go.Figure()
-    colors = ['#38bdf8' if t == 'Auto' else '#f59e0b' for t in agents_df['Type']]
+    colors = ['#6366f1' if t == 'Auto' else '#f59e0b' for t in agents_df['Type']]
     fig_lb.add_trace(go.Bar(
         x=agents_df['Margin Saved'], y=agents_df['Agent'],
         orientation='h', marker_color=colors,
         text=[f"${v:,.0f}" for v in agents_df['Margin Saved']],
-        textposition='outside', textfont=dict(color='#9ca3af', size=11)
+        textposition='outside', textfont=dict(color='#64748b', size=11)
     ))
     fig_lb.update_layout(**CHART_LAYOUT, height=300, showlegend=False,
                          xaxis_title='Margin Saved ($)')
@@ -708,21 +763,22 @@ with tab_live:
         ls2['human_recoveries'] += o['_human_recovery']
 
         # Show result card
-        result_color = '#10b981' if success else ('#f43f5e' if not recoverable else '#f59e0b')
+        result_color = '#059669' if success else ('#f43f5e' if not recoverable else '#f59e0b')
+        result_bg = '#f0fdf4' if success else ('#fff1f2' if not recoverable else '#fffbeb')
         st.markdown(f"""
-        <div style='background:#111827; border:2px solid {result_color}; border-radius:12px; padding:16px; margin-top:12px;'>
+        <div style='background:{result_bg}; border:2px solid {result_color}; border-radius:14px; padding:18px; margin-top:12px; box-shadow:0 4px 12px rgba(0,0,0,0.06);'>
           <div style='font-size:18px; font-weight:700; color:{result_color};'>{icon} {label} — Order {o['Order']}</div>
-          <div style='color:#9ca3af; margin-top:8px; font-size:13px;'>
-            Value: <b style='color:white'>${m_value:,.0f}</b> &nbsp;|&nbsp;
-            Margin: <b style='color:white'>{m_margin}%</b> &nbsp;|&nbsp;
-            Tier: <b style='color:#38bdf8'>{tier}</b> &nbsp;|&nbsp;
-            State: <b style='color:white'>{m_state}</b>
+          <div style='color:#64748b; margin-top:8px; font-size:13px;'>
+            Value: <b style='color:#1e293b'>${m_value:,.0f}</b> &nbsp;|&nbsp;
+            Margin: <b style='color:#1e293b'>{m_margin}%</b> &nbsp;|&nbsp;
+            Tier: <b style='color:#6366f1'>{tier}</b> &nbsp;|&nbsp;
+            State: <b style='color:#1e293b'>{m_state}</b>
           </div>
-          <div style='color:#9ca3af; margin-top:6px; font-size:13px;'>
-            Revenue Prevented: <b style='color:#10b981'>${rev_prevented:,.0f}</b> &nbsp;|&nbsp;
-            Margin Saved: <b style='color:#10b981'>${ms:,.0f}</b> &nbsp;|&nbsp;
+          <div style='color:#64748b; margin-top:6px; font-size:13px;'>
+            Revenue Prevented: <b style='color:#059669'>${rev_prevented:,.0f}</b> &nbsp;|&nbsp;
+            Margin Saved: <b style='color:#059669'>${ms:,.0f}</b> &nbsp;|&nbsp;
             Agent Cost: <b style='color:#f59e0b'>${cost}</b> &nbsp;|&nbsp;
-            Net Profit: <b style='color:#10b981'>${ms-cost:,.0f}</b>
+            Net Profit: <b style='color:#059669'>${ms-cost:,.0f}</b>
           </div>
         </div>
         """, unsafe_allow_html=True)
@@ -761,9 +817,9 @@ with tab_risk:
             fig_fail = go.Figure(go.Bar(
                 x=fail_df['count'], y=fail_df['intervention_failure_reason'],
                 orientation='h',
-                marker_color=['#f43f5e', '#f59e0b', '#818cf8', '#fb923c'][:len(fail_df)],
+                marker_color=['#f43f5e', '#f59e0b', '#6366f1', '#fb923c'][:len(fail_df)],
                 text=fail_df['count'], textposition='outside',
-                textfont=dict(color='#9ca3af', size=11)
+                textfont=dict(color='#64748b', size=11)
             ))
             fig_fail.update_layout(**CHART_LAYOUT, height=280, showlegend=False)
             st.plotly_chart(fig_fail, use_container_width=True)
@@ -796,14 +852,14 @@ with tab_risk:
                         color_discrete_map={'ai_cancelled': '#f43f5e', 'recovered': '#10b981'},
                         labels={'value': 'Orders', 'demand_level': 'Demand Level'})
     fig_demand.update_layout(**CHART_LAYOUT, height=280,
-                             legend=dict(x=0, y=1, bgcolor='rgba(0,0,0,0)'))
+                             legend=dict(x=0, y=1, bgcolor='rgba(255,255,255,0)'))
     st.plotly_chart(fig_demand, use_container_width=True)
 
 
 # ── Footer ─────────────────────────────────────────────────────────────────────
 st.markdown("---")
 st.markdown(
-    "<p style='text-align:center; color:#374151; font-size:12px;'>"
+    "<p style='text-align:center; color:#94a3b8; font-size:12px;'>"
     "Navedas Governance Intelligence Platform · All financials in USD · EST timezone · Production-grade"
     "</p>",
     unsafe_allow_html=True
