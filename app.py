@@ -925,7 +925,8 @@ with tab_risk:
                 text=fail_df['count'], textposition='outside',
                 textfont=dict(color='#64748b', size=11)
             ))
-            fig_fail.update_layout(**CHART_LAYOUT, height=280, showlegend=False)
+            fig_fail.update_layout(**CHART_LAYOUT, height=280, showlegend=False,
+                                   margin=dict(l=40, r=55, t=20, b=20))
             st.plotly_chart(fig_fail, use_container_width=True)
 
     with col_fi:
@@ -956,7 +957,13 @@ with tab_risk:
                         color_discrete_map={'ai_cancelled': '#f43f5e', 'recovered': '#10b981'},
                         labels={'value': 'Orders', 'demand_level': 'Demand Level'})
     fig_demand.update_layout(**CHART_LAYOUT, height=280,
-                             legend=dict(x=0, y=1, bgcolor='rgba(255,255,255,0)'))
+                             legend=dict(
+                                 orientation='h',
+                                 yanchor='bottom', y=1.04,
+                                 xanchor='center', x=0.5,
+                                 bgcolor='rgba(255,255,255,0)',
+                                 font=dict(size=11, color='#374151'),
+                             ))
     st.plotly_chart(fig_demand, use_container_width=True)
 
 
