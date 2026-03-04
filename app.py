@@ -44,6 +44,12 @@ except Exception:
     def generate_order(counter): return {}
     def insert_orders_batch(conn, orders): pass
 
+try:
+    from governance_chat_agent import ask as chat_ask
+except Exception:
+    def chat_ask(question, db_path=None):
+        return "Chat assistant unavailable. Please check governance_chat_agent.py."
+
 # ── Page config ────────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Navedas Governance Intelligence Platform",
@@ -237,7 +243,9 @@ if 'db_path' not in st.session_state:
 if 'live_orders' not in st.session_state:  st.session_state.live_orders = []
 if 'sim_running' not in st.session_state:  st.session_state.sim_running = False
 if 'live_counter' not in st.session_state: st.session_state.live_counter = 800000
-if 'feed_counter' not in st.session_state: st.session_state.feed_counter = 0
+if 'feed_counter'  not in st.session_state: st.session_state.feed_counter  = 0
+if 'auto_feed'     not in st.session_state: st.session_state.auto_feed     = False
+if 'chat_history'  not in st.session_state: st.session_state.chat_history  = []
 _LIVE_DEFAULTS = {
     'count': 0, 'rev_prevented': 0, 'margin_saved': 0,
     'int_cost': 0, 'net_profit': 0, 'residual_loss': 0,
@@ -343,6 +351,22 @@ with st.sidebar:
                 st.toast(f"Processed {summary['processed']} orders")
             except Exception as e:
                 st.error(str(e))
+
+    # Auto-feed scheduler toggle
+    auto_feed = st.toggle("🔄 Auto Feed (every refresh)", value=st.session_state.auto_feed)
+    st.session_state.auto_feed = auto_feed
+    if auto_feed:
+        st.markdown("<div style='font-size:11px;color:#059669;'>Feed auto-generates on each sim cycle</div>",
+                    unsafe_allow_html=True)
+        try:
+            conn = sqlite3.connect(_DB_FILE)
+            ensure_schema(conn)
+            st.session_state.feed_counter += 1
+            batch = [generate_order(st.session_state.feed_counter * 100 + i) for i in range(5)]
+            insert_orders_batch(conn, batch)
+            conn.close()
+        except Exception:
+            pass
 
     st.markdown("---")
 
@@ -502,9 +526,9 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ── TABS ───────────────────────────────────────────────────────────────────────
-tab_overview, tab_governance, tab_agents, tab_live, tab_risk, tab_agent_intel, tab_arch = st.tabs([
+tab_overview, tab_governance, tab_agents, tab_live, tab_risk, tab_agent_intel, tab_arch, tab_chat = st.tabs([
     "📊 Overview", "🏛️ Governance", "👥 Agents", "📡 Live Feed",
-    "⚠️ Risk", "🤖 Agent Intel", "🏗️ Architecture"
+    "⚠️ Risk", "🤖 Agent Intel", "🏗️ Architecture", "💬 Chat"
 ])
 
 
@@ -1241,6 +1265,75 @@ with tab_arch:
             unsafe_allow_html=True)
     except Exception as e:
         st.warning(f"DB status unavailable: {e}")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 8 — CHAT ASSISTANT
+# ══════════════════════════════════════════════════════════════════════════════
+with tab_chat:
+    st.markdown(sh("Governance Chat Assistant — Ask anything about your data"), unsafe_allow_html=True)
+
+    # Welcome message on first load
+    if not st.session_state.chat_history:
+        st.session_state.chat_history.append({
+            "role": "assistant",
+            "content": (
+                "👋 **Welcome to the Navedas Governance Chat Assistant!**\n\n"
+                "I can answer questions about your governance platform metrics.\n\n"
+                "Try asking:\n"
+                "- *How much revenue was prevented?*\n"
+                "- *What is the governance ROI?*\n"
+                "- *What is the health score?*\n"
+                "- *Give me a full summary*\n\n"
+                "Type **help** to see all supported questions."
+            )
+        })
+
+    # Render chat history
+    for msg in st.session_state.chat_history:
+        with st.chat_message(msg["role"],
+                             avatar="🏛️" if msg["role"] == "assistant" else "👤"):
+            st.markdown(msg["content"])
+
+    # Chat input
+    if prompt := st.chat_input("Ask about governance metrics…"):
+        st.session_state.chat_history.append({"role": "user", "content": prompt})
+        with st.chat_message("user", avatar="👤"):
+            st.markdown(prompt)
+
+        with st.chat_message("assistant", avatar="🏛️"):
+            with st.spinner("Analysing…"):
+                response = chat_ask(prompt, _DB_FILE)
+            st.markdown(response)
+
+        st.session_state.chat_history.append({"role": "assistant", "content": response})
+
+    # Quick question buttons
+    st.markdown("---")
+    st.markdown('<div class="section-header">Quick Questions</div>', unsafe_allow_html=True)
+    quick_cols = st.columns(4)
+    quick_qs = [
+        "Give me a summary",
+        "What is the governance ROI?",
+        "What is the health score?",
+        "How many recoveries?",
+        "How much revenue was prevented?",
+        "What is the AI cancellation rate?",
+        "Show recent interventions",
+        "What are the top failure reasons?",
+    ]
+    for i, q in enumerate(quick_qs):
+        with quick_cols[i % 4]:
+            if st.button(q, use_container_width=True, key=f"quick_{i}"):
+                st.session_state.chat_history.append({"role": "user", "content": q})
+                response = chat_ask(q, _DB_FILE)
+                st.session_state.chat_history.append({"role": "assistant", "content": response})
+                st.rerun()
+
+    # Clear chat
+    if st.button("🗑 Clear Chat", use_container_width=False):
+        st.session_state.chat_history = []
+        st.rerun()
 
 
 # ── Footer ─────────────────────────────────────────────────────────────────────

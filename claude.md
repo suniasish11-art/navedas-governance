@@ -14,7 +14,10 @@ a SaaS-quality dashboard.
 ```
 Synthetic Order Feed (synthetic_feed_generator.py)
         │
-        │  inserts rows every few seconds
+        │  inserts rows on demand or via scheduler
+        ▼
+Feed Scheduler (feed_scheduler.py)  ← runs independently, every 20s
+        │
         ▼
 orders_feed table (SQLite)
         │
@@ -37,11 +40,13 @@ Governance Intelligence Dashboard (app.py / Streamlit)
 
 | File | Role |
 |---|---|
-| `app.py` | Dashboard UI — visualization layer only |
+| `app.py` | Dashboard UI — 8 tabs, visualization layer only |
 | `pipeline.py` | Data loading, KPI computation, DB helpers |
 | `governance_engine.py` | 4-rule decision engine + GHS formula |
 | `navedas_agent.py` | Agent loop — polls feed, applies rules, writes results |
 | `synthetic_feed_generator.py` | Inserts synthetic orders into orders_feed |
+| `feed_scheduler.py` | Standalone background scheduler — runs every 20s |
+| `governance_chat_agent.py` | NLP chat assistant — keyword intent → SQL → answer |
 | `data.csv` | 5000-row historical order dataset (seed data) |
 
 ---
@@ -245,12 +250,88 @@ Score is clamped to [0, 100]
 - Event Timeline (recent interventions from DB)
 - Intervention type distribution (pie + bar)
 
-### Tab 7 — Architecture (NEW)
-- Visual architecture diagram (4-node flow)
+### Tab 7 — Architecture
+- Visual architecture diagram (4-node flow using st.columns)
 - Database schema cards
 - Governance rules reference
 - GHS formula
 - Live DB row counts
+
+### Tab 8 — Chat (NEW)
+- NLP Governance Chat Assistant
+- Quick question buttons (8 pre-built queries)
+- Full chat history with user/assistant avatars
+- Clear chat button
+
+---
+
+## Feed Scheduler (feed_scheduler.py)
+
+Runs as a **standalone background process** independent of Streamlit.
+
+```
+python feed_scheduler.py
+```
+
+**Behavior:**
+- Inserts `SCHEDULER_BATCH_SIZE` orders (default 5) every `SCHEDULER_INTERVAL` seconds (default 20)
+- Logs cycle progress to stdout
+- Runs until Ctrl+C
+
+**Environment variables:**
+```
+SCHEDULER_INTERVAL=20    # seconds between batches
+SCHEDULER_BATCH_SIZE=5   # orders per batch
+```
+
+**In Streamlit Cloud:**
+Use the sidebar **Auto Feed** toggle, which inserts 5 orders on each refresh cycle.
+
+---
+
+## NLP Chat Assistant (governance_chat_agent.py)
+
+Keyword-based NLP interpreter — no external AI API required.
+
+### How it works
+
+```
+User types question
+        ↓
+detect_intent() scans for keyword patterns
+        ↓
+Maps to one of 14 intents
+        ↓
+Handler queries SQLite (orders + orders_processed)
+        ↓
+Returns formatted markdown table answer
+```
+
+### Supported intents
+
+| Intent | Example question |
+|---|---|
+| `revenue_prevented` | How much revenue was saved? |
+| `roi` | What is the governance ROI? |
+| `recoveries` | How many orders were recovered? |
+| `recovery_rate` | What is the recovery rate? |
+| `cancellation_rate` | What is the AI cancellation rate? |
+| `health_score` | What is the health score? |
+| `net_profit` | How much net profit was generated? |
+| `intervention_cost` | What is the total intervention cost? |
+| `agent_stats` | How is the agent performing? |
+| `top_failures` | What are the top failure reasons? |
+| `margin_saved` | How much margin was saved? |
+| `total_orders` | How many total orders? |
+| `recent_events` | Show recent interventions |
+| `summary` | Give me a full summary |
+| `help` | Help / what can you ask? |
+
+### Usage
+```python
+from governance_chat_agent import ask
+response = ask("How much revenue was prevented?")
+```
 
 ---
 
