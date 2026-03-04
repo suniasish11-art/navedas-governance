@@ -367,6 +367,15 @@ def sh(title):
             f"letter-spacing:.09em;color:#7c3aed;margin-bottom:14px;margin-top:6px;"
             f"padding-bottom:8px;border-bottom:2px solid #ede9fe;'>{title}</div>")
 
+def fmt_money(v):
+    """Format dollar value with K/M suffix for KPI cards."""
+    if abs(v) >= 1_000_000:
+        return f"${v/1_000_000:.2f}M"
+    elif abs(v) >= 1_000:
+        return f"${v/1_000:.1f}K"
+    else:
+        return f"${v:,.0f}"
+
 # ── Header banner (CSAT.AI style gradient) ────────────────────────────────────
 live_dot = "🟢 LIVE" if st.session_state.sim_running else "⏸ Paused"
 live_chip_style = ("background:rgba(16,185,129,.25);color:#d1fae5;" if st.session_state.sim_running
@@ -428,8 +437,8 @@ with tab_overview:
         kr(
             kc("Total Orders",          f"{C['total']:,}",                   live_sub,                              "#f0fdf4", "#059669", "#bbf7d0"),
             kc("AI Cancel Rate",        f"{C['cancel_rate']*100:.1f}%",      f"{C['ai_cancelled']:,} cancelled",    "#fff1f2", "#e11d48", "#fecdd3"),
-            kc("Revenue Lost (AI Only)",f"${kpis['revenue_lost_ai']:,.0f}",  "Before governance",                  "#fff1f2", "#e11d48", "#fecdd3"),
-            kc("Profit Lost (AI Only)", f"${kpis['profit_lost_ai']:,.0f}",   "Gross profit exposure",              "#fff1f2", "#e11d48", "#fecdd3"),
+            kc("Revenue Lost (AI Only)",fmt_money(kpis['revenue_lost_ai']),   "Before governance",                  "#fff1f2", "#e11d48", "#fecdd3"),
+            kc("Profit Lost (AI Only)", fmt_money(kpis['profit_lost_ai']),   "Gross profit exposure",              "#fff1f2", "#e11d48", "#fecdd3"),
         ),
         unsafe_allow_html=True)
 
@@ -450,10 +459,10 @@ with tab_overview:
     st.markdown(
         sh("Governance Impact · Layer 2+3 combined Navedas performance") +
         kr(
-            kc("Revenue Prevented", f"${C['rev_prevented']:,.0f}",  "Saved from cancellation", "#f0fdf4", "#059669", "#bbf7d0"),
-            kc("Margin Saved",      f"${C['margin_saved']:,.0f}",   "Gross profit recovered",  "#f0fdf4", "#059669", "#bbf7d0"),
-            kc("Intervention Cost", f"${C['int_cost']:,.0f}",       "Total agent spend",        "#fffbeb", "#d97706", "#fde68a"),
-            kc("Net Profit Impact", f"${C['net_profit']:,.0f}",     "Margin − Cost",            "#f0fdf4", "#059669", "#bbf7d0"),
+            kc("Revenue Prevented", fmt_money(C['rev_prevented']),   "Saved from cancellation", "#f0fdf4", "#059669", "#bbf7d0"),
+            kc("Margin Saved",      fmt_money(C['margin_saved']),   "Gross profit recovered",  "#f0fdf4", "#059669", "#bbf7d0"),
+            kc("Intervention Cost", fmt_money(C['int_cost']),       "Total agent spend",        "#fffbeb", "#d97706", "#fde68a"),
+            kc("Net Profit Impact", fmt_money(C['net_profit']),     "Margin − Cost",            "#f0fdf4", "#059669", "#bbf7d0"),
             kc("Governance ROI",    f"{C['roi']:.1f}x",             "Margin ÷ Cost",            "#f5f3ff", "#7c3aed", "#ddd6fe"),
         ),
         unsafe_allow_html=True)
@@ -487,7 +496,7 @@ with tab_overview:
             margin=dict(l=40, r=20, t=20, b=60),
             xaxis=dict(gridcolor='#e2e8f0', tickfont=dict(color='#64748b', size=11)),
             yaxis=dict(gridcolor='#e2e8f0', showgrid=True,
-                       tickformat='$,.0f', tickfont=dict(color='#64748b')),
+                       tickprefix='$', tickformat='~s', tickfont=dict(color='#64748b')),
         )
         st.plotly_chart(fig_wf, use_container_width=True)
 
@@ -544,10 +553,10 @@ with tab_governance:
     st.markdown(
         sh("Governance Financial Intelligence · Full lifecycle analysis") +
         kr(
-            kc("Revenue Prevented", f"${C['rev_prevented']:,.0f}", "Saved from cancellation", "#f0fdf4", "#059669", "#bbf7d0"),
-            kc("Margin Saved",      f"${C['margin_saved']:,.0f}",  "Gross profit recovered",  "#f0fdf4", "#059669", "#bbf7d0"),
-            kc("Int. Cost",         f"${C['int_cost']:,.0f}",      "Total agent spend",        "#fffbeb", "#d97706", "#fde68a"),
-            kc("Net Profit",        f"${C['net_profit']:,.0f}",    "Margin − Cost",            "#f0fdf4", "#059669", "#bbf7d0"),
+            kc("Revenue Prevented", fmt_money(C['rev_prevented']),  "Saved from cancellation", "#f0fdf4", "#059669", "#bbf7d0"),
+            kc("Margin Saved",      fmt_money(C['margin_saved']),  "Gross profit recovered",  "#f0fdf4", "#059669", "#bbf7d0"),
+            kc("Int. Cost",         fmt_money(C['int_cost']),      "Total agent spend",        "#fffbeb", "#d97706", "#fde68a"),
+            kc("Net Profit",        fmt_money(C['net_profit']),    "Margin − Cost",            "#f0fdf4", "#059669", "#bbf7d0"),
             kc("ROI",               f"{C['roi']:.1f}x",            "Margin ÷ Cost",            "#f5f3ff", "#7c3aed", "#ddd6fe"),
         ),
         unsafe_allow_html=True)
@@ -735,13 +744,13 @@ with tab_live:
             "<div style='height:8px'></div>" +
             kc("Successfully Saved", f"{ls['recovered']:,}",       "interventions",   "#f0fdf4", "#059669", "#bbf7d0") +
             "<div style='height:8px'></div>" +
-            kc("Revenue Prevented",  f"${ls['rev_prevented']:,.0f}","live prevented", "#f0fdf4", "#059669", "#bbf7d0") +
+            kc("Revenue Prevented",  fmt_money(ls['rev_prevented']), "live prevented", "#f0fdf4", "#059669", "#bbf7d0") +
             "<div style='height:8px'></div>" +
-            kc("Margin Saved",       f"${ls['margin_saved']:,.0f}", "gross profit",   "#f0fdf4", "#059669", "#bbf7d0") +
+            kc("Margin Saved",       fmt_money(ls['margin_saved']),  "gross profit",   "#f0fdf4", "#059669", "#bbf7d0") +
             "<div style='height:8px'></div>" +
-            kc("Net Profit",         f"${ls['net_profit']:,.0f}",   "margin−cost",    "#f0fdf4", "#059669", "#bbf7d0") +
+            kc("Net Profit",         fmt_money(ls['net_profit']),    "margin−cost",    "#f0fdf4", "#059669", "#bbf7d0") +
             "<div style='height:8px'></div>" +
-            kc("Residual Loss",      f"${ls['residual_loss']:,.0f}","failed recoveries","#fff1f2","#e11d48","#fecdd3")+
+            kc("Residual Loss",      fmt_money(ls['residual_loss']), "failed recoveries","#fff1f2","#e11d48","#fecdd3")+
             "<div style='height:8px'></div>" +
             kc("Session ROI",        session_roi_val,               "margin÷cost",    "#f5f3ff", "#7c3aed", "#ddd6fe"),
             unsafe_allow_html=True)
@@ -898,10 +907,10 @@ with tab_risk:
     st.markdown(
         sh("Residual Risk Analysis") +
         kr(
-            kc("Residual Recoverable Loss", f"${C['residual_loss']:,.0f}",  "Revenue still at risk",                    "#fff1f2", "#e11d48", "#fecdd3"),
+            kc("Residual Recoverable Loss", fmt_money(C['residual_loss']),   "Revenue still at risk",                    "#fff1f2", "#e11d48", "#fecdd3"),
             kc("Legitimate Non-Recoverable",f"{C['not_recoverable']:,}",    "Correctly left as-is",                     "#fafafa", "#6b7280", "#e5e7eb"),
             kc("Successfully Recovered",    f"{C['recovered']:,}",          f"{C['recovery_rate_pool']*100:.1f}% of pool","#f0fdf4","#059669","#bbf7d0"),
-            kc("Net Revenue Protected",     f"${C['rev_prevented']:,.0f}",  "Cumulative static + live",                 "#f0fdf4", "#059669", "#bbf7d0"),
+            kc("Net Revenue Protected",     fmt_money(C['rev_prevented']),   "Cumulative static + live",                 "#f0fdf4", "#059669", "#bbf7d0"),
         ),
         unsafe_allow_html=True)
 
