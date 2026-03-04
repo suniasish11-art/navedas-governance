@@ -247,7 +247,8 @@ with st.sidebar:
     if st.session_state.df is not None:
         st.success(f"✅ {len(st.session_state.df):,} orders loaded from DB")
 
-    with st.expander("Replace data (optional)"):
+    show_upload = st.checkbox("Replace data (optional)", value=False)
+    if show_upload:
         uploaded = st.file_uploader("Upload new CSV", type=['csv'],
                                     help="Replaces the current DB with fresh data")
         if uploaded:
