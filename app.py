@@ -29,6 +29,17 @@ def _check_password() -> bool:
     if st.session_state.get("_authenticated"):
         return True
 
+    # ── IP Allowlist (optional — set ALLOWED_IPS in Streamlit Secrets) ──────
+    # Format in secrets.toml: ALLOWED_IPS = "1.2.3.4,5.6.7.8"
+    # Leave blank or omit to allow all IPs (password-only mode)
+    allowed_raw = st.secrets.get("ALLOWED_IPS", os.environ.get("ALLOWED_IPS", ""))
+    if allowed_raw.strip():
+        allowed_ips = [ip.strip() for ip in allowed_raw.split(",") if ip.strip()]
+        visitor_ip  = st.context.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+        if visitor_ip and visitor_ip not in allowed_ips:
+            st.error("🚫 Access denied. Your IP is not authorised.")
+            st.stop()
+
     # Centred login card
     st.markdown("""
     <div style='display:flex; justify-content:center; align-items:center;
