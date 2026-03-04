@@ -15,6 +15,15 @@ from pipeline import (
     compute_agent_stats, generate_live_order,
     load_csv_to_db, load_from_db, db_exists, _DB_FILE
 )
+from governance_engine import compute_governance_health_score
+from navedas_agent import (
+    run_agent_cycle, get_agent_summary,
+    get_recent_events, get_feed_pending_count
+)
+from synthetic_feed_generator import (
+    ensure_schema, generate_order, insert_orders_batch
+)
+import sqlite3
 
 # ── Page config ────────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -26,13 +35,9 @@ st.set_page_config(
 
 # ── Password Protection ────────────────────────────────────────────────────────
 def _check_password() -> bool:
-    """Gate the entire app behind a password. Returns True if authenticated."""
     if st.session_state.get("_authenticated"):
         return True
 
-    # ── IP Allowlist (optional — set ALLOWED_IPS in Streamlit Secrets) ──────
-    # Format in secrets.toml: ALLOWED_IPS = "1.2.3.4,5.6.7.8"
-    # Leave blank or omit to allow all IPs (password-only mode)
     allowed_raw = st.secrets.get("ALLOWED_IPS", os.environ.get("ALLOWED_IPS", ""))
     if allowed_raw.strip():
         allowed_ips = [ip.strip() for ip in allowed_raw.split(",") if ip.strip()]
@@ -41,13 +46,12 @@ def _check_password() -> bool:
             st.error("🚫 Access denied. Your IP is not authorised.")
             st.stop()
 
-    # Centred login card
     st.markdown("""
     <div style='display:flex; justify-content:center; align-items:center;
                 min-height:80vh; flex-direction:column;'>
-      <div style='background:#ffffff; border:2px solid #7c3aed; border-radius:20px;
+      <div style='background:#ffffff; border:2px solid #6C63FF; border-radius:20px;
                   padding:48px 56px; max-width:420px; width:100%; text-align:center;
-                  box-shadow: 0 20px 60px rgba(124,58,237,0.12);'>
+                  box-shadow: 0 20px 60px rgba(108,99,255,0.12);'>
         <div style='font-size:52px; margin-bottom:12px;'>🏛️</div>
         <h2 style='color:#1e293b; margin:0 0 4px;'>Navedas GIP</h2>
         <p style='color:#64748b; font-size:13px; margin-bottom:32px;'>
@@ -57,14 +61,12 @@ def _check_password() -> bool:
     </div>
     """, unsafe_allow_html=True)
 
-    # Centre the form using columns
     _, col, _ = st.columns([1, 1.2, 1])
     with col:
         with st.form("login_form"):
             pwd = st.text_input("Password", type="password", placeholder="Enter access password")
             login = st.form_submit_button("🔐 Access Dashboard", use_container_width=True, type="primary")
         if login:
-            # Read from Streamlit Secrets; fall back to env var for local dev
             correct = st.secrets.get("APP_PASSWORD", os.environ.get("APP_PASSWORD", "Navedas@2024"))
             if pwd == correct:
                 st.session_state["_authenticated"] = True
@@ -75,7 +77,6 @@ def _check_password() -> bool:
 
 if not _check_password():
     st.stop()
-# ── End Password Protection ────────────────────────────────────────────────────
 
 # ── Custom CSS ─────────────────────────────────────────────────────────────────
 st.markdown("""
@@ -84,8 +85,8 @@ st.markdown("""
   html, body, [class*="css"], * { font-family: 'Inter', sans-serif !important; }
 
   /* ── Base ── */
-  .stApp { background: #f4f6fa !important; }
-  .main  { background: #f4f6fa !important; }
+  .stApp { background: #F6F8FC !important; }
+  .main  { background: #F6F8FC !important; }
   section[data-testid="stSidebar"] {
     background: #ffffff !important;
     border-right: 2px solid #ede9fe !important;
@@ -94,7 +95,7 @@ st.markdown("""
   section[data-testid="stSidebar"] label,
   section[data-testid="stSidebar"] span { color: #374151 !important; }
 
-  /* ── Tabs — active = purple pill ── */
+  /* ── Tabs ── */
   .stTabs [data-baseweb="tab-list"] {
     background: #ffffff !important;
     border: 1px solid #e5e7eb !important;
@@ -113,18 +114,17 @@ st.markdown("""
     border: none !important;
   }
   .stTabs [aria-selected="true"] {
-    background: #7c3aed !important;
+    background: #6C63FF !important;
     color: #ffffff !important;
     font-weight: 700 !important;
     border-radius: 8px !important;
   }
-  /* force override BaseWeb indicator bar */
   .stTabs [data-baseweb="tab-highlight"] { display: none !important; }
   .stTabs [data-baseweb="tab-border"]    { display: none !important; }
 
   /* ── Buttons ── */
   button[kind="primary"], .stButton > button[data-testid*="primary"] {
-    background: #7c3aed !important; border-color: #7c3aed !important;
+    background: #6C63FF !important; border-color: #6C63FF !important;
     color: white !important; border-radius: 8px !important; font-weight: 600 !important;
   }
   .stButton > button {
@@ -153,28 +153,29 @@ st.markdown("""
     padding: 20px !important;
   }
 
-  /* ── Section headers (class-based, used in chart areas) ── */
+  /* ── Section headers ── */
   .section-header {
     font-size: 11px !important; font-weight: 700 !important;
     text-transform: uppercase !important; letter-spacing: .09em !important;
-    color: #7c3aed !important; margin-bottom: 14px !important;
-    padding-bottom: 8px !important; border-bottom: 2px solid #ede9fe !important;
+    color: #6C63FF !important; margin-bottom: 14px !important;
+    padding-bottom: 8px !important; border-bottom: 2px solid #e8e6ff !important;
   }
 
-  /* ── Plotly chart card containers ── */
+  /* ── Plotly chart cards ── */
   [data-testid="stPlotlyChart"] {
     background: #ffffff !important;
     border: 1px solid #e5e7eb !important;
     border-radius: 14px !important;
     padding: 12px 8px 4px 8px !important;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.05) !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04) !important;
     margin-bottom: 4px !important;
   }
 
-  /* ── Dividers ── */
+  /* ── KPI cards shadow ── */
+  .kpi-card { box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+
   hr { border-color: #e5e7eb !important; }
 
-  /* ── Live badge ── */
   .live-badge {
     display: inline-block; width: 8px; height: 8px; border-radius: 50%;
     background: #10b981; animation: pulse 1.5s infinite; margin-right: 6px;
@@ -202,11 +203,9 @@ BASE_LAYOUT = dict(
 if 'df' not in st.session_state:           st.session_state.df = None
 if 'db_path' not in st.session_state:
     if db_exists(_DB_FILE):
-        # DB already on disk from this session
         st.session_state.db_path = _DB_FILE
         st.session_state.df = load_from_db(_DB_FILE)
     else:
-        # Auto-seed from bundled data.csv (no upload required)
         _bundled = os.path.join(os.path.dirname(__file__), 'data.csv')
         if os.path.exists(_bundled):
             with open(_bundled, 'r', encoding='utf-8') as _f:
@@ -219,6 +218,7 @@ if 'db_path' not in st.session_state:
 if 'live_orders' not in st.session_state:  st.session_state.live_orders = []
 if 'sim_running' not in st.session_state:  st.session_state.sim_running = False
 if 'live_counter' not in st.session_state: st.session_state.live_counter = 800000
+if 'feed_counter' not in st.session_state: st.session_state.feed_counter = 0
 _LIVE_DEFAULTS = {
     'count': 0, 'rev_prevented': 0, 'margin_saved': 0,
     'int_cost': 0, 'net_profit': 0, 'residual_loss': 0,
@@ -228,22 +228,30 @@ _LIVE_DEFAULTS = {
 if 'live_stats' not in st.session_state:
     st.session_state.live_stats = dict(_LIVE_DEFAULTS)
 else:
-    # Migrate old session state — add any missing keys with 0
     for _k, _v in _LIVE_DEFAULTS.items():
         if _k not in st.session_state.live_stats:
             st.session_state.live_stats[_k] = _v
 
-# ── Auto-refresh when simulation running ───────────────────────────────────────
+# ── Auto-refresh ───────────────────────────────────────────────────────────────
 if st.session_state.sim_running:
     st_autorefresh(interval=2000, key="live_refresh")
+else:
+    # Passive 5s refresh to pick up agent-processed orders
+    st_autorefresh(interval=5000, key="passive_refresh")
 
 # ── Sidebar ────────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("## 🏛️ Navedas GIP")
-    st.markdown("**Governance Intelligence Platform**")
+    st.markdown("""
+<div style='text-align:center;padding:16px 0 8px;'>
+  <div style='font-size:32px;'>🏛️</div>
+  <div style='font-size:15px;font-weight:800;color:#1e293b;margin-top:4px;'>Navedas GIP</div>
+  <div style='font-size:11px;color:#6b7280;margin-top:2px;'>Governance Intelligence Platform</div>
+</div>
+""", unsafe_allow_html=True)
     st.markdown("---")
 
-    st.markdown("### 📂 Data Source")
+    # ── Data Source ─────────────────────────────────────────────────────────
+    st.markdown("#### 📂 Data Source")
     if st.session_state.df is not None:
         st.success(f"✅ {len(st.session_state.df):,} orders loaded from DB")
 
@@ -260,7 +268,9 @@ with st.sidebar:
             st.success(f"✅ {len(st.session_state.df):,} orders loaded")
 
     st.markdown("---")
-    st.markdown("### ⚡ Live Simulation")
+
+    # ── Agent Controls ──────────────────────────────────────────────────────
+    st.markdown("#### ⚡ Live Simulation")
     col1, col2 = st.columns(2)
     with col1:
         if st.button("▶ Start", use_container_width=True, type="primary"):
@@ -272,7 +282,6 @@ with st.sidebar:
     if st.session_state.sim_running:
         st.markdown('<span class="live-badge"></span> **Live feed active**', unsafe_allow_html=True)
         ls = st.session_state.live_stats
-        # Generate 3 orders per 2-second cycle for visible real-time updates
         for _ in range(3):
             st.session_state.live_counter += 1
             o = generate_live_order(st.session_state.live_counter)
@@ -292,26 +301,56 @@ with st.sidebar:
         st.session_state.live_orders = st.session_state.live_orders[:50]
 
     st.markdown("---")
+
+    # ── Governance Agent Controls ───────────────────────────────────────────
+    st.markdown("#### 🤖 Governance Agent")
+    pending = get_feed_pending_count(_DB_FILE)
+    st.markdown(f"<div style='font-size:12px;color:#6b7280;'>Feed pending: <b style='color:#6C63FF;'>{pending}</b> orders</div>", unsafe_allow_html=True)
+
+    col_a, col_b = st.columns(2)
+    with col_a:
+        if st.button("+ Feed Orders", use_container_width=True):
+            try:
+                conn = sqlite3.connect(_DB_FILE)
+                ensure_schema(conn)
+                st.session_state.feed_counter += 1
+                batch = [generate_order(st.session_state.feed_counter * 100 + i) for i in range(10)]
+                insert_orders_batch(conn, batch)
+                conn.close()
+                st.toast("10 orders added to feed")
+            except Exception as e:
+                st.error(str(e))
+    with col_b:
+        if st.button("Run Agent", use_container_width=True, type="primary"):
+            try:
+                summary = run_agent_cycle(_DB_FILE)
+                st.toast(f"Processed {summary['processed']} orders")
+            except Exception as e:
+                st.error(str(e))
+
+    st.markdown("---")
+
+    # ── System Info ─────────────────────────────────────────────────────────
     st.markdown("""
-<div style='font-family:Inter,sans-serif;background:#f8f7ff;border:1px solid #ede9fe;
+<div style='font-family:Inter,sans-serif;background:#f8f7ff;border:1px solid #e8e6ff;
             border-radius:10px;padding:12px 14px;margin-top:4px;'>
   <div style='font-family:Inter,sans-serif;font-size:10px;font-weight:800;
-              text-transform:uppercase;letter-spacing:.12em;color:#7c3aed;
-              margin-bottom:10px;border-bottom:1px solid #ede9fe;padding-bottom:6px;'>
-    &#9881; &nbsp;System Info</div>
+              text-transform:uppercase;letter-spacing:.12em;color:#6C63FF;
+              margin-bottom:10px;border-bottom:1px solid #e8e6ff;padding-bottom:6px;'>
+    &#9881;&nbsp; System Info</div>
   <div style='font-size:12px;color:#374151;line-height:1.9;'>
     <span style='color:#9ca3af;'>Currency</span>&nbsp;&nbsp;<strong>USD ($)</strong><br>
     <span style='color:#9ca3af;'>Timezone</span>&nbsp;&nbsp;<strong>EST (New York)</strong><br>
     <span style='color:#9ca3af;'>Format</span>&nbsp;&nbsp;&nbsp;&nbsp;<strong>Shopify-aligned</strong><br>
-    <span style='color:#9ca3af;'>Database</span>&nbsp;&nbsp;<strong>SQLite (seeded)</strong>
+    <span style='color:#9ca3af;'>Database</span>&nbsp;&nbsp;<strong>SQLite (live)</strong>
   </div>
 </div>
 """, unsafe_allow_html=True)
     st.markdown("---")
-    st.markdown("<div style='font-family:Inter,sans-serif;font-size:11px;color:#9ca3af;text-align:center;'>Navedas GIP v1.0 · Production-grade</div>", unsafe_allow_html=True)
+    st.markdown("<div style='font-family:Inter,sans-serif;font-size:11px;color:#9ca3af;text-align:center;'>Navedas GIP v2.0 · Production-grade</div>", unsafe_allow_html=True)
 
 
-# ── Load from DB (session-cached) ─────────────────────────────────────────────
+# ── Load from DB ───────────────────────────────────────────────────────────────
 df = st.session_state.df
 
 if df is None:
@@ -323,79 +362,93 @@ if df is None:
         Real-Time AI Order Governance Engine · US/Shopify Aligned
       </p>
       <div style='background:white; border:1px solid #e2e8f0; border-radius:16px; padding:32px;
-                  max-width:500px; margin:0 auto; box-shadow:0 4px 16px rgba(124,58,237,0.08);'>
-        <p style='color:#475569;'>👈 Upload your <strong style='color:#1e293b;'>ecommerce CSV</strong>
-           in the sidebar — it will be stored in a SQLite database and all dashboard views
-           will query the DB directly.</p>
+                  max-width:500px; margin:0 auto; box-shadow:0 4px 16px rgba(108,99,255,0.08);'>
+        <p style='color:#475569;'>Loading data from database…</p>
       </div>
     </div>
     """, unsafe_allow_html=True)
     st.stop()
 
-# ── Compute static KPIs ────────────────────────────────────────────────────────
-kpis = compute_kpis(df)
-ts   = compute_time_series(df)
+# ── Compute KPIs ───────────────────────────────────────────────────────────────
+kpis      = compute_kpis(df)
+ts        = compute_time_series(df)
 agents_df = compute_agent_stats(df)
-ls = st.session_state.live_stats
+ls        = st.session_state.live_stats
 
-# ── Combined (Static + Live) values — used by ALL tabs ────────────────────────
-C = {}   # single combined dict
+# Agent processed stats (from DB)
+agent_db  = get_agent_summary(_DB_FILE)
 
-C['total']          = kpis['total_orders']      + ls['count']
-C['ai_cancelled']   = kpis['ai_cancelled']       + ls['ai_cancelled']
-C['cancel_rate']    = C['ai_cancelled'] / C['total'] if C['total'] > 0 else 0
-C['recoverable']    = kpis['total_recoverable']  + ls['recoverable']
-C['not_recoverable']= kpis['not_recoverable']    + ls['not_recoverable']
-C['recovered']      = kpis.get('recovered', int(kpis['total_recoverable'] * kpis['recovery_rate_pool'])) + ls['recovered']
-C['recovery_rate_pool'] = (C['recovered'] / C['recoverable']
-                           if C['recoverable'] > 0 else 0)
-C['net_recovery_rate']  = (C['recovered'] / C['ai_cancelled']
-                           if C['ai_cancelled'] > 0 else 0)
-C['pct_recoverable']    = (C['recoverable'] / C['ai_cancelled']
-                           if C['ai_cancelled'] > 0 else 0)
-C['rev_prevented']  = kpis['revenue_prevented']  + ls['rev_prevented']
-C['margin_saved']   = kpis['margin_saved']        + ls['margin_saved']
-C['int_cost']       = kpis['intervention_cost']   + ls['int_cost']
-C['net_profit']     = kpis['net_profit']           + ls['net_profit']
-C['roi']            = C['margin_saved'] / C['int_cost'] if C['int_cost'] > 0 else kpis['roi']
-C['residual_loss']  = kpis['residual_loss']       + ls['residual_loss']
-C['auto_recoveries']= kpis['auto_recoveries']     + ls['auto_recoveries']
-C['human_recoveries']= kpis['human_recoveries']  + ls['human_recoveries']
-C['live_count']     = ls['count']
+# Combined (Static + Live)
+C = {}
+C['total']           = kpis['total_orders']      + ls['count']
+C['ai_cancelled']    = kpis['ai_cancelled']       + ls['ai_cancelled']
+C['cancel_rate']     = C['ai_cancelled'] / C['total'] if C['total'] > 0 else 0
+C['recoverable']     = kpis['total_recoverable']  + ls['recoverable']
+C['not_recoverable'] = kpis['not_recoverable']    + ls['not_recoverable']
+C['recovered']       = kpis.get('recovered', int(kpis['total_recoverable'] * kpis['recovery_rate_pool'])) + ls['recovered']
+C['recovery_rate_pool']  = (C['recovered'] / C['recoverable']  if C['recoverable'] > 0 else 0)
+C['net_recovery_rate']   = (C['recovered'] / C['ai_cancelled'] if C['ai_cancelled'] > 0 else 0)
+C['pct_recoverable']     = (C['recoverable'] / C['ai_cancelled'] if C['ai_cancelled'] > 0 else 0)
+C['rev_prevented']   = kpis['revenue_prevented']  + ls['rev_prevented']
+C['margin_saved']    = kpis['margin_saved']        + ls['margin_saved']
+C['int_cost']        = kpis['intervention_cost']   + ls['int_cost']
+C['net_profit']      = kpis['net_profit']           + ls['net_profit']
+C['roi']             = C['margin_saved'] / C['int_cost'] if C['int_cost'] > 0 else kpis['roi']
+C['residual_loss']   = kpis['residual_loss']       + ls['residual_loss']
+C['auto_recoveries'] = kpis['auto_recoveries']     + ls['auto_recoveries']
+C['human_recoveries']= kpis['human_recoveries']    + ls['human_recoveries']
+C['live_count']      = ls['count']
 
-# ── HTML card helpers (CSAT.AI style) ─────────────────────────────────────────
-def kc(label, value, sub="", bg="#f5f3ff", color="#7c3aed", border="#ddd6fe"):
-    sub_html = f"<div style='font-size:11px;color:#9ca3af;margin-top:5px;'>{sub}</div>" if sub else ""
-    return (f"<div style='flex:1;background:{bg};border:1px solid {border};"
-            f"border-radius:14px;padding:20px 22px;min-width:0;'>"
-            f"<div style='font-size:10px;font-weight:700;text-transform:uppercase;"
-            f"letter-spacing:.08em;color:#6b7280;margin-bottom:8px;'>{label}</div>"
-            f"<div style='font-size:24px;font-weight:800;color:{color};line-height:1.1;'>{value}</div>"
-            f"{sub_html}</div>")
+# ── Governance Health Score ────────────────────────────────────────────────────
+ghs = compute_governance_health_score(
+    recovery_rate            = C['recovery_rate_pool'],
+    residual_loss            = C['residual_loss'],
+    ai_loss                  = kpis['revenue_lost_ai'],
+    sla_compliance           = kpis['sla_compliance'],
+    successful_interventions = C['recovered'],
+    total_interventions      = C['recoverable'],
+)
+
+# ── HTML card helpers ──────────────────────────────────────────────────────────
+def kc(label, value, sub="", bg="#F1F0FF", color="#6C63FF", border="#ddd6fe", icon=""):
+    icon_html = f"<span style='font-size:18px;margin-right:6px;'>{icon}</span>" if icon else ""
+    sub_html  = f"<div style='font-size:11px;color:#9ca3af;margin-top:5px;'>{sub}</div>" if sub else ""
+    return (
+        f"<div style='flex:1;background:{bg};border:1px solid {border};"
+        f"border-radius:14px;padding:20px 22px;min-width:0;"
+        f"box-shadow:0 2px 8px rgba(0,0,0,0.04);'>"
+        f"<div style='font-size:10px;font-weight:700;text-transform:uppercase;"
+        f"letter-spacing:.08em;color:#6b7280;margin-bottom:8px;'>{icon_html}{label}</div>"
+        f"<div style='font-size:24px;font-weight:800;color:{color};line-height:1.1;'>{value}</div>"
+        f"{sub_html}</div>"
+    )
 
 def kr(*cards):
     return "<div style='display:flex;gap:12px;margin-bottom:16px;'>" + "".join(cards) + "</div>"
 
 def sh(title):
-    return (f"<div style='font-size:11px;font-weight:700;text-transform:uppercase;"
-            f"letter-spacing:.09em;color:#7c3aed;margin-bottom:14px;margin-top:6px;"
-            f"padding-bottom:8px;border-bottom:2px solid #ede9fe;'>{title}</div>")
+    return (
+        f"<div style='font-size:11px;font-weight:700;text-transform:uppercase;"
+        f"letter-spacing:.09em;color:#6C63FF;margin-bottom:14px;margin-top:6px;"
+        f"padding-bottom:8px;border-bottom:2px solid #e8e6ff;'>{title}</div>"
+    )
 
 def fmt_money(v):
-    """Format dollar value with K/M suffix for KPI cards."""
     if abs(v) >= 1_000_000:
         return f"${v/1_000_000:.2f}M"
     elif abs(v) >= 1_000:
         return f"${v/1_000:.1f}K"
-    else:
-        return f"${v:,.0f}"
+    return f"${v:,.0f}"
 
-# ── Header banner (CSAT.AI style gradient) ────────────────────────────────────
+# ── Header Banner ──────────────────────────────────────────────────────────────
 live_dot = "🟢 LIVE" if st.session_state.sim_running else "⏸ Paused"
 live_chip_style = ("background:rgba(16,185,129,.25);color:#d1fae5;" if st.session_state.sim_running
                    else "background:rgba(255,255,255,.15);color:rgba(255,255,255,.7);")
+ghs_chip_color = {"Excellent": "#059669", "Healthy": "#2563eb",
+                  "Warning": "#d97706", "Critical": "#e11d48"}.get(ghs['band'], "#6C63FF")
+
 st.markdown(f"""
-<div style='background:linear-gradient(135deg,#7c3aed 0%,#4f46e5 55%,#0ea5e9 100%);
+<div style='background:linear-gradient(135deg,#6C63FF 0%,#4f46e5 55%,#0ea5e9 100%);
             border-radius:20px;padding:28px 36px;margin-bottom:24px;color:white;'>
   <div style='display:flex;align-items:flex-start;gap:14px;margin-bottom:20px;'>
     <span style='font-size:34px;'>🏛️</span>
@@ -421,21 +474,21 @@ st.markdown(f"""
     <div style='flex:1;padding-left:28px;border-right:1px solid rgba(255,255,255,.2);padding-right:28px;'>
       <div style='font-size:10px;text-transform:uppercase;letter-spacing:.1em;opacity:.7;'>Net Profit Impact</div>
       <div style='font-size:32px;font-weight:800;margin-top:2px;'>${C['net_profit']/1e6:.2f}M</div>
-      <div style='font-size:11px;opacity:.6;'>Margin − Cost</div>
+      <div style='font-size:11px;opacity:.6;'>Margin &#8722; Cost</div>
     </div>
     <div style='flex:1;padding-left:28px;'>
-      <div style='font-size:10px;text-transform:uppercase;letter-spacing:.1em;opacity:.7;'>Live Orders</div>
-      <div style='font-size:32px;font-weight:800;margin-top:2px;'>{len(st.session_state.live_orders):,}</div>
-      <div style='font-size:11px;opacity:.6;'>in session feed</div>
+      <div style='font-size:10px;text-transform:uppercase;letter-spacing:.1em;opacity:.7;'>Health Score</div>
+      <div style='font-size:32px;font-weight:800;margin-top:2px;'>{ghs['score']}</div>
+      <div style='font-size:11px;opacity:.6;'>{ghs['band']}</div>
     </div>
   </div>
 </div>
 """, unsafe_allow_html=True)
 
 # ── TABS ───────────────────────────────────────────────────────────────────────
-
-tab_overview, tab_governance, tab_agents, tab_live, tab_risk = st.tabs([
-    "📊 Overview", "🏛️ Governance", "👥 Agents", "📡 Live Feed", "⚠️ Risk"
+tab_overview, tab_governance, tab_agents, tab_live, tab_risk, tab_agent_intel, tab_arch = st.tabs([
+    "📊 Overview", "🏛️ Governance", "👥 Agents", "📡 Live Feed",
+    "⚠️ Risk", "🤖 Agent Intel", "🏗️ Architecture"
 ])
 
 
@@ -444,45 +497,44 @@ tab_overview, tab_governance, tab_agents, tab_live, tab_risk = st.tabs([
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_overview:
 
-    # ── Layer 1: AI Baseline ───────────────────────────────────────────────────
+    # Executive Overview with GHS
     live_sub = f"+{C['live_count']} live" if C['live_count'] > 0 else f"{C['total']:,} total"
     st.markdown(
-        sh("Layer 1 — AI Baseline · Unmitigated cancellation impact") +
+        sh("Executive Overview · AI Baseline + Governance Health") +
         kr(
-            kc("Total Orders",          f"{C['total']:,}",                   live_sub,                              "#f0fdf4", "#059669", "#bbf7d0"),
-            kc("AI Cancel Rate",        f"{C['cancel_rate']*100:.1f}%",      f"{C['ai_cancelled']:,} cancelled",    "#fff1f2", "#e11d48", "#fecdd3"),
-            kc("Revenue Lost (AI Only)",fmt_money(kpis['revenue_lost_ai']),   "Before governance",                  "#fff1f2", "#e11d48", "#fecdd3"),
-            kc("Profit Lost (AI Only)", fmt_money(kpis['profit_lost_ai']),   "Gross profit exposure",              "#fff1f2", "#e11d48", "#fecdd3"),
+            kc("Total Orders",          f"{C['total']:,}",                   live_sub,                            "#E8F5E9","#059669","#bbf7d0","📦"),
+            kc("AI Cancel Rate",        f"{C['cancel_rate']*100:.1f}%",      f"{C['ai_cancelled']:,} cancelled",  "#FFE6E6","#e11d48","#fecdd3","⚠️"),
+            kc("Revenue Lost (AI Only)",fmt_money(kpis['revenue_lost_ai']),   "Before governance",                "#FFE6E6","#e11d48","#fecdd3","💸"),
+            kc("Governance Health",     f"{ghs['score']}",                   ghs['band'],                        "#F1F0FF","#6C63FF","#ddd6fe","🧠"),
         ),
         unsafe_allow_html=True)
 
-    # ── Recoverability ─────────────────────────────────────────────────────────
+    # Recoverability
     rec_sub  = f"+{ls['recoverable']} live" if ls['recoverable'] > 0 else f"{C['pct_recoverable']*100:.1f}% of cancelled"
-    saved_sub= f"{C['recovered']:,} saved" if ls['recovered'] > 0 else "Of recoverable orders"
     st.markdown(
         sh("Recoverability Analysis · How much can governance recover?") +
         kr(
-            kc("Recoverable Orders",    f"{C['recoverable']:,}",                  rec_sub,                          "#f5f3ff", "#7c3aed", "#ddd6fe"),
-            kc("Recovery Rate (Pool)",  f"{C['recovery_rate_pool']*100:.1f}%",    saved_sub,                        "#eff6ff", "#2563eb", "#bfdbfe"),
-            kc("Net Recovery Rate",     f"{C['net_recovery_rate']*100:.1f}%",     "Of all AI-cancelled",            "#eff6ff", "#2563eb", "#bfdbfe"),
-            kc("Unrecoverable",         f"{C['not_recoverable']:,}",              "Correctly left as-is",           "#fafafa", "#6b7280", "#e5e7eb"),
+            kc("Recoverable Orders",    f"{C['recoverable']:,}",               rec_sub,                          "#F1F0FF","#6C63FF","#ddd6fe","🔍"),
+            kc("Recovery Rate (Pool)",  f"{C['recovery_rate_pool']*100:.1f}%", f"{C['recovered']:,} saved",      "#E6F7EE","#059669","#bbf7d0","✅"),
+            kc("Net Recovery Rate",     f"{C['net_recovery_rate']*100:.1f}%",  "Of all AI-cancelled",            "#E6F7EE","#059669","#bbf7d0","📈"),
+            kc("Unrecoverable",         f"{C['not_recoverable']:,}",           "Correctly left as-is",           "#F6F8FC","#6b7280","#e5e7eb","🚫"),
         ),
         unsafe_allow_html=True)
 
-    # ── Governance Impact ──────────────────────────────────────────────────────
+    # Governance Impact
     st.markdown(
-        sh("Governance Impact · Layer 2+3 combined Navedas performance") +
+        sh("Governance Impact · Layer 2+3 combined performance") +
         kr(
-            kc("Revenue Prevented", fmt_money(C['rev_prevented']),   "Saved from cancellation", "#f0fdf4", "#059669", "#bbf7d0"),
-            kc("Margin Saved",      fmt_money(C['margin_saved']),   "Gross profit recovered",  "#f0fdf4", "#059669", "#bbf7d0"),
-            kc("Intervention Cost", fmt_money(C['int_cost']),       "Total agent spend",        "#fffbeb", "#d97706", "#fde68a"),
-            kc("Net Profit Impact", fmt_money(C['net_profit']),     "Margin − Cost",            "#f0fdf4", "#059669", "#bbf7d0"),
-            kc("Governance ROI",    f"{C['roi']:.1f}x",             "Margin ÷ Cost",            "#f5f3ff", "#7c3aed", "#ddd6fe"),
+            kc("Revenue Prevented", fmt_money(C['rev_prevented']),   "Saved from cancellation","#E6F7EE","#059669","#bbf7d0","💰"),
+            kc("Margin Saved",      fmt_money(C['margin_saved']),    "Gross profit recovered",  "#E8F5E9","#059669","#bbf7d0","💹"),
+            kc("Intervention Cost", fmt_money(C['int_cost']),        "Total agent spend",        "#fffbeb","#d97706","#fde68a","⚙️"),
+            kc("Net Profit Impact", fmt_money(C['net_profit']),      "Margin &#8722; Cost",      "#E6F7EE","#059669","#bbf7d0","📈"),
+            kc("Governance ROI",    f"{C['roi']:.1f}x",              "Margin ÷ Cost",            "#F1F0FF","#6C63FF","#ddd6fe","🏆"),
         ),
         unsafe_allow_html=True)
 
-    # ── Charts row ─────────────────────────────────────────────────────────────
-    col_w, col_g = st.columns([2, 1])
+    # Charts row
+    col_w, col_g, col_h = st.columns([2, 1, 1])
 
     with col_w:
         st.markdown('<div class="section-header">Revenue Waterfall — AI Baseline vs Governance Outcome</div>',
@@ -520,10 +572,10 @@ with tab_overview:
             mode="gauge+number+delta",
             value=C['roi'],
             delta={"reference": 10, "valueformat": ".1f", "suffix": "x"},
-            number={"suffix": "x", "font": {"size": 32, "color": "#7c3aed"}},
+            number={"suffix": "x", "font": {"size": 32, "color": "#6C63FF"}},
             gauge={
                 "axis": {"range": [0, 200], "tickcolor": "#94a3b8"},
-                "bar": {"color": "#7c3aed", "thickness": 0.3},
+                "bar": {"color": "#6C63FF", "thickness": 0.3},
                 "bgcolor": "#f8fafc", "borderwidth": 0,
                 "steps": [
                     {"range": [0,  10], "color": "#fef3c7"},
@@ -533,29 +585,50 @@ with tab_overview:
                 "threshold": {"line": {"color": "#f59e0b", "width": 3}, "value": 10}
             }
         ))
-        fig_g.add_annotation(
-            text=f"${C['margin_saved']:,.0f}<br><span style='font-size:10px;color:#64748b'>Margin Saved</span>",
-            xref="paper", yref="paper", x=0.25, y=0.1, showarrow=False,
-            font=dict(color='#059669', size=11), align='center')
-        fig_g.add_annotation(
-            text=f"${C['int_cost']:,.0f}<br><span style='font-size:10px;color:#64748b'>Int. Cost</span>",
-            xref="paper", yref="paper", x=0.75, y=0.1, showarrow=False,
-            font=dict(color='#f59e0b', size=11), align='center')
         fig_g.update_layout(paper_bgcolor='rgba(255,255,255,0)', plot_bgcolor='rgba(255,255,255,1)',
                             height=320, margin=dict(l=20, r=20, t=30, b=10),
                             font=dict(color='#475569'))
         st.plotly_chart(fig_g, use_container_width=True)
 
-    # ── Operational ────────────────────────────────────────────────────────────
+    with col_h:
+        st.markdown('<div class="section-header">Governance Health Score</div>', unsafe_allow_html=True)
+        band_ranges = {"Excellent": [90,100], "Healthy": [75,89], "Warning": [60,74], "Critical": [0,59]}
+        fig_ghs = go.Figure(go.Indicator(
+            mode="gauge+number",
+            value=ghs['score'],
+            number={"font": {"size": 36, "color": ghs['color']}},
+            gauge={
+                "axis": {"range": [0, 100], "tickcolor": "#94a3b8"},
+                "bar": {"color": ghs['color'], "thickness": 0.3},
+                "bgcolor": "#f8fafc", "borderwidth": 0,
+                "steps": [
+                    {"range": [0,  60], "color": "#fee2e2"},
+                    {"range": [60, 75], "color": "#fef3c7"},
+                    {"range": [75, 90], "color": "#d1fae5"},
+                    {"range": [90,100], "color": "#dcfce7"},
+                ],
+                "threshold": {"line": {"color": ghs['color'], "width": 3}, "value": ghs['score']}
+            }
+        ))
+        fig_ghs.add_annotation(
+            text=f"<b>{ghs['band']}</b>",
+            xref="paper", yref="paper", x=0.5, y=0.18, showarrow=False,
+            font=dict(color=ghs['color'], size=13))
+        fig_ghs.update_layout(paper_bgcolor='rgba(255,255,255,0)', plot_bgcolor='rgba(255,255,255,1)',
+                              height=320, margin=dict(l=20, r=20, t=30, b=10),
+                              font=dict(color='#475569'))
+        st.plotly_chart(fig_ghs, use_container_width=True)
+
+    # Operational
     auto_sub  = f"+{ls['auto_recoveries']} live" if ls['auto_recoveries'] > 0 else "Layer 2 agent"
     human_sub = f"+{ls['human_recoveries']} live" if ls['human_recoveries'] > 0 else "Layer 3 agent"
     st.markdown(
         sh("Operational Metrics") +
         kr(
-            kc("Auto Recoveries",   f"{C['auto_recoveries']:,}",           auto_sub,                                     "#eff6ff", "#2563eb", "#bfdbfe"),
-            kc("Human Recoveries",  f"{C['human_recoveries']:,}",          human_sub,                                    "#f5f3ff", "#7c3aed", "#ddd6fe"),
-            kc("Avg Recovery Time", f"{kpis['avg_latency']:.1f} min",      "Per intervention",                           "#fffbeb", "#d97706", "#fde68a"),
-            kc("SLA Compliance",    f"{kpis['sla_compliance']*100:.1f}%",  f"Split: {kpis['split_rate']*100:.1f}%",      "#f0fdf4", "#059669", "#bbf7d0"),
+            kc("Auto Recoveries",   f"{C['auto_recoveries']:,}",          auto_sub,                                "#E6F7EE","#059669","#bbf7d0","🤖"),
+            kc("Human Recoveries",  f"{C['human_recoveries']:,}",         human_sub,                               "#F1F0FF","#6C63FF","#ddd6fe","👤"),
+            kc("Avg Recovery Time", f"{kpis['avg_latency']:.1f} min",     "Per intervention",                      "#fffbeb","#d97706","#fde68a","⏱️"),
+            kc("SLA Compliance",    f"{kpis['sla_compliance']*100:.1f}%", f"Split: {kpis['split_rate']*100:.1f}%", "#E6F7EE","#059669","#bbf7d0","✅"),
         ),
         unsafe_allow_html=True)
 
@@ -567,15 +640,14 @@ with tab_governance:
     st.markdown(
         sh("Governance Financial Intelligence · Full lifecycle analysis") +
         kr(
-            kc("Revenue Prevented", fmt_money(C['rev_prevented']),  "Saved from cancellation", "#f0fdf4", "#059669", "#bbf7d0"),
-            kc("Margin Saved",      fmt_money(C['margin_saved']),  "Gross profit recovered",  "#f0fdf4", "#059669", "#bbf7d0"),
-            kc("Int. Cost",         fmt_money(C['int_cost']),      "Total agent spend",        "#fffbeb", "#d97706", "#fde68a"),
-            kc("Net Profit",        fmt_money(C['net_profit']),    "Margin − Cost",            "#f0fdf4", "#059669", "#bbf7d0"),
-            kc("ROI",               f"{C['roi']:.1f}x",            "Margin ÷ Cost",            "#f5f3ff", "#7c3aed", "#ddd6fe"),
+            kc("Revenue Prevented", fmt_money(C['rev_prevented']),  "Saved from cancellation","#E6F7EE","#059669","#bbf7d0","💰"),
+            kc("Margin Saved",      fmt_money(C['margin_saved']),   "Gross profit recovered",  "#E8F5E9","#059669","#bbf7d0","💹"),
+            kc("Int. Cost",         fmt_money(C['int_cost']),       "Total agent spend",        "#fffbeb","#d97706","#fde68a","⚙️"),
+            kc("Net Profit",        fmt_money(C['net_profit']),     "Margin &#8722; Cost",      "#E6F7EE","#059669","#bbf7d0","📈"),
+            kc("ROI",               f"{C['roi']:.1f}x",             "Margin ÷ Cost",            "#F1F0FF","#6C63FF","#ddd6fe","🏆"),
         ),
         unsafe_allow_html=True)
 
-    # ROI + Margin trend
     col_t, col_m = st.columns(2)
     with col_t:
         st.markdown(sh("Recovery Trend & ROI Over Time"), unsafe_allow_html=True)
@@ -592,13 +664,8 @@ with tab_governance:
             yaxis=dict(title='Margin Saved ($)', gridcolor='#e2e8f0', showgrid=True, color='#64748b'),
             yaxis2=dict(title='ROI (x)', overlaying='y', side='right', gridcolor='#e2e8f0', color='#64748b'),
             xaxis=dict(gridcolor='#e2e8f0', showgrid=True, color='#64748b'),
-            legend=dict(
-                orientation='h',
-                yanchor='bottom', y=1.04,
-                xanchor='center', x=0.5,
-                bgcolor='rgba(255,255,255,0)',
-                font=dict(size=11, color='#374151'),
-            ),
+            legend=dict(orientation='h', yanchor='bottom', y=1.04, xanchor='center', x=0.5,
+                        bgcolor='rgba(255,255,255,0)', font=dict(size=11, color='#374151')),
         )
         st.plotly_chart(fig_ts, use_container_width=True)
 
@@ -612,62 +679,56 @@ with tab_governance:
         fig_bar.add_trace(go.Bar(x=ts['month_label'], y=ts['int_cost'],
                                  name='Int. Cost', marker_color='#fbbf24', opacity=0.85))
         fig_bar.update_layout(**CHART_LAYOUT, height=320, barmode='group',
-                              legend=dict(
-                                  orientation='h',
-                                  yanchor='bottom', y=1.04,
-                                  xanchor='center', x=0.5,
-                                  bgcolor='rgba(255,255,255,0)',
-                                  font=dict(size=11, color='#374151'),
-                                  traceorder='normal',
-                                  itemwidth=40,
-                              ))
+                              legend=dict(orientation='h', yanchor='bottom', y=1.04,
+                                          xanchor='center', x=0.5, bgcolor='rgba(255,255,255,0)',
+                                          font=dict(size=11, color='#374151'),
+                                          traceorder='normal', itemwidth=40))
         st.plotly_chart(fig_bar, use_container_width=True)
 
-    # Recovery funnel + Routing logic
+    # Funnel + Routing
     col_f, col_r = st.columns(2)
     with col_f:
         st.markdown('<div class="section-header">Recovery Funnel</div>', unsafe_allow_html=True)
-        funnel_data = {
-            'Stage': ['Total Orders', 'AI Cancelled', 'Recoverable', 'Successfully Recovered'],
-            'Count': [C['total'], C['ai_cancelled'], C['recoverable'], C['recovered']],
-            'Color': ['#38bdf8', '#f59e0b', '#818cf8', '#10b981']
-        }
         fig_funnel = go.Figure(go.Funnel(
-            y=funnel_data['Stage'], x=funnel_data['Count'],
+            y=['Total Orders', 'AI Cancelled', 'Recoverable', 'Auto Recovery', 'Human Recovery', 'Residual Loss'],
+            x=[C['total'], C['ai_cancelled'], C['recoverable'],
+               C['auto_recoveries'], C['human_recoveries'],
+               int(C['recoverable'] - C['recovered'])],
             textinfo="value+percent initial",
-            marker_color=funnel_data['Color'],
+            marker_color=['#38bdf8', '#f59e0b', '#818cf8', '#6C63FF', '#10b981', '#fb7185'],
             connector={"line": {"color": "#e2e8f0", "width": 2}}
         ))
         fig_funnel.update_layout(paper_bgcolor='rgba(255,255,255,0)', plot_bgcolor='rgba(255,255,255,1)',
-                                  height=280, margin=dict(l=20, r=20, t=10, b=10),
+                                  height=320, margin=dict(l=20, r=20, t=10, b=10),
                                   font=dict(color='#475569'))
         st.plotly_chart(fig_funnel, use_container_width=True)
 
     with col_r:
         routing_rows = [
-            ("#eff6ff", "#bfdbfe", "#1d4ed8", "Layer 2 — Auto (&lt;$75)",       "Full Auto Refund",     "$5",  "96%"),
-            ("#eff6ff", "#bfdbfe", "#1d4ed8", "Layer 2 — Auto (Medium Risk)",   "Split / Partial Auto", "$15", "85%"),
-            ("#fffbeb", "#fde68a", "#d97706", "Layer 3 — Human (High Risk)",    "Human Review Queue",   "$25", "80%"),
+            ("#E6F7EE","#bbf7d0","#059669","Rule 1 — Auto Refund (&lt;$75)",       "Full Auto Refund",     "$5",  "96%"),
+            ("#E6F7EE","#bbf7d0","#059669","Rule 2 — Split Fulfillment",            "Vendor Split",         "$15", "85%"),
+            ("#fffbeb","#fde68a","#d97706","Rule 3 — Human Agent (&gt;40% margin)", "Human Review Queue",   "$25", "80%"),
+            ("#F1F0FF","#ddd6fe","#6C63FF","Rule 4 — Retry Payment",                "Payment Retry",        "$8",  "72%"),
         ]
-        rhtml = sh("Governance Routing Engine — $75 Threshold")
+        rhtml = sh("Governance Routing Engine — 4 Decision Rules")
         for bg, brd, clr, tier, action, cost, success in routing_rows:
             rhtml += (
                 f"<div style='background:{bg};border:1px solid {brd};border-radius:12px;"
-                f"padding:16px 18px;margin-bottom:10px;'>"
-                f"<div style='font-size:12px;font-weight:700;color:{clr};margin-bottom:10px;'>"
-                f"<span style='font-size:14px;margin-right:6px;'>&#9679;</span>{tier}</div>"
-                f"<div style='display:flex;gap:28px;'>"
+                f"padding:14px 16px;margin-bottom:8px;'>"
+                f"<div style='font-size:12px;font-weight:700;color:{clr};margin-bottom:8px;'>"
+                f"<span style='margin-right:6px;'>&#9679;</span>{tier}</div>"
+                f"<div style='display:flex;gap:24px;'>"
                 f"<div><div style='font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;'>Action</div>"
-                f"<div style='font-size:13px;font-weight:600;color:#374151;margin-top:3px;'>{action}</div></div>"
+                f"<div style='font-size:12px;font-weight:600;color:#374151;margin-top:2px;'>{action}</div></div>"
                 f"<div><div style='font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;'>Avg Cost</div>"
-                f"<div style='font-size:13px;font-weight:600;color:#374151;margin-top:3px;'>{cost}</div></div>"
-                f"<div><div style='font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;'>Success Rate</div>"
-                f"<div style='font-size:14px;font-weight:800;color:{clr};margin-top:3px;'>{success}</div></div>"
+                f"<div style='font-size:12px;font-weight:600;color:#374151;margin-top:2px;'>{cost}</div></div>"
+                f"<div><div style='font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;'>Success</div>"
+                f"<div style='font-size:13px;font-weight:800;color:{clr};margin-top:2px;'>{success}</div></div>"
                 f"</div></div>"
             )
         st.markdown(rhtml, unsafe_allow_html=True)
 
-    # Net profit by reason (static CSV — cancellation reasons don't change live)
+    # Net profit by reason
     st.markdown('<div class="section-header">Net Profit Impact by Cancellation Reason</div>',
                 unsafe_allow_html=True)
     by_reason = df[df['ai_cancel_flag'] == 1].groupby('cancellation_reason').agg(
@@ -676,7 +737,7 @@ with tab_governance:
         orders=('order_id', 'count')
     ).reset_index()
     fig_pie = px.pie(by_reason, values='net_profit', names='cancellation_reason',
-                     color_discrete_sequence=['#10b981', '#6366f1', '#f43f5e', '#f59e0b'],
+                     color_discrete_sequence=['#10b981', '#6C63FF', '#f43f5e', '#f59e0b'],
                      hole=0.4)
     fig_pie.update_layout(paper_bgcolor='rgba(255,255,255,0)', height=300,
                           font=dict(color='#475569'), showlegend=True,
@@ -692,7 +753,6 @@ with tab_governance:
 with tab_agents:
     st.markdown('<div class="section-header">Agent Performance Leaderboard</div>', unsafe_allow_html=True)
 
-    # Leaderboard bar chart (static proportions, updated total counts)
     fig_lb = go.Figure()
     colors = ['#818cf8' if t == 'Auto' else '#f472b6' for t in agents_df['Type']]
     fig_lb.add_trace(go.Bar(
@@ -714,12 +774,12 @@ with tab_agents:
     st.markdown(
         sh("Operational Performance — Combined Static + Live") +
         kr(
-            kc("Auto Recoveries",    f"{C['auto_recoveries']:,}",               "Layer 2 bots",      "#eff6ff", "#2563eb", "#bfdbfe"),
-            kc("Human Recoveries",   f"{C['human_recoveries']:,}",              "Layer 3 humans",    "#f5f3ff", "#7c3aed", "#ddd6fe"),
-            kc("Total Recovered",    f"{C['recovered']:,}",                     "All interventions", "#f0fdf4", "#059669", "#bbf7d0"),
-            kc("Recovery Pool Rate", f"{C['recovery_rate_pool']*100:.1f}%",     "Of recoverable",    "#f0fdf4", "#059669", "#bbf7d0"),
-            kc("Avg Recovery Time",  f"{kpis['avg_latency']:.1f} min",          "Per order",         "#fffbeb", "#d97706", "#fde68a"),
-            kc("SLA Compliance",     f"{kpis['sla_compliance']*100:.1f}%",      "Service level",     "#f0fdf4", "#059669", "#bbf7d0"),
+            kc("Auto Recoveries",    f"{C['auto_recoveries']:,}",              "Layer 2 bots",      "#E6F7EE","#059669","#bbf7d0","🤖"),
+            kc("Human Recoveries",   f"{C['human_recoveries']:,}",             "Layer 3 humans",    "#F1F0FF","#6C63FF","#ddd6fe","👤"),
+            kc("Total Recovered",    f"{C['recovered']:,}",                    "All interventions", "#E6F7EE","#059669","#bbf7d0","✅"),
+            kc("Recovery Pool Rate", f"{C['recovery_rate_pool']*100:.1f}%",    "Of recoverable",    "#E6F7EE","#059669","#bbf7d0","📈"),
+            kc("Avg Recovery Time",  f"{kpis['avg_latency']:.1f} min",         "Per order",         "#fffbeb","#d97706","#fde68a","⏱️"),
+            kc("SLA Compliance",     f"{kpis['sla_compliance']*100:.1f}%",     "Service level",     "#E6F7EE","#059669","#bbf7d0","✅"),
         ),
         unsafe_allow_html=True)
 
@@ -738,10 +798,10 @@ with tab_live:
             display_orders = []
             for o in st.session_state.live_orders[:25]:
                 display_orders.append({
-                    'Order':   o['Order'],       'State':   o['State'],
-                    'Demand':  o['Demand'],       'Value':   o['Value'],
-                    'Margin':  o['Margin'],       'Reason':  o['Reason'][:20],
-                    'Tier':    o['Tier'],         'Outcome': o['Outcome']
+                    'Order':   o['Order'],  'State':   o['State'],
+                    'Demand':  o['Demand'], 'Value':   o['Value'],
+                    'Margin':  o['Margin'], 'Reason':  o['Reason'][:20],
+                    'Tier':    o['Tier'],   'Outcome': o['Outcome']
                 })
             st.dataframe(pd.DataFrame(display_orders), use_container_width=True, hide_index=True)
 
@@ -750,28 +810,24 @@ with tab_live:
         session_roi_val = f"{ls['margin_saved']/ls['int_cost']:.1f}x" if ls['int_cost'] > 0 else "—"
         st.markdown(
             sh("Live Session KPIs") +
-            kc("Orders Processed",   f"{ls['count']:,}",           "this session",    "#f5f3ff", "#7c3aed", "#ddd6fe") +
+            kc("Orders Processed",   f"{ls['count']:,}",            "this session",     "#F1F0FF","#6C63FF","#ddd6fe") +
             "<div style='height:8px'></div>" +
-            kc("AI Cancelled",       f"{ls['ai_cancelled']:,}",    cancel_rate_sub,   "#fff1f2", "#e11d48", "#fecdd3") +
+            kc("AI Cancelled",       f"{ls['ai_cancelled']:,}",     cancel_rate_sub,    "#FFE6E6","#e11d48","#fecdd3") +
             "<div style='height:8px'></div>" +
-            kc("Recoverable",        f"{ls['recoverable']:,}",     "flagged orders",  "#eff6ff", "#2563eb", "#bfdbfe") +
+            kc("Recoverable",        f"{ls['recoverable']:,}",      "flagged orders",   "#F1F0FF","#6C63FF","#ddd6fe") +
             "<div style='height:8px'></div>" +
-            kc("Successfully Saved", f"{ls['recovered']:,}",       "interventions",   "#f0fdf4", "#059669", "#bbf7d0") +
+            kc("Successfully Saved", f"{ls['recovered']:,}",        "interventions",    "#E6F7EE","#059669","#bbf7d0") +
             "<div style='height:8px'></div>" +
-            kc("Revenue Prevented",  fmt_money(ls['rev_prevented']), "live prevented", "#f0fdf4", "#059669", "#bbf7d0") +
+            kc("Revenue Prevented",  fmt_money(ls['rev_prevented']),"live prevented",   "#E6F7EE","#059669","#bbf7d0") +
             "<div style='height:8px'></div>" +
-            kc("Margin Saved",       fmt_money(ls['margin_saved']),  "gross profit",   "#f0fdf4", "#059669", "#bbf7d0") +
+            kc("Net Profit",         fmt_money(ls['net_profit']),   "margin&#8722;cost","#E6F7EE","#059669","#bbf7d0") +
             "<div style='height:8px'></div>" +
-            kc("Net Profit",         fmt_money(ls['net_profit']),    "margin−cost",    "#f0fdf4", "#059669", "#bbf7d0") +
-            "<div style='height:8px'></div>" +
-            kc("Residual Loss",      fmt_money(ls['residual_loss']), "failed recoveries","#fff1f2","#e11d48","#fecdd3")+
-            "<div style='height:8px'></div>" +
-            kc("Session ROI",        session_roi_val,               "margin÷cost",    "#f5f3ff", "#7c3aed", "#ddd6fe"),
+            kc("Session ROI",        session_roi_val,               "margin÷cost",      "#F1F0FF","#6C63FF","#ddd6fe"),
             unsafe_allow_html=True)
 
     st.divider()
     st.markdown('<div class="section-header">Simulation Controls</div>', unsafe_allow_html=True)
-    st.markdown("Generates **3 Shopify-format orders every 2 seconds** (~90/min), routes each through the 3-layer governance engine, and updates **all KPIs across every tab** in real-time.")
+    st.markdown("Generates **3 Shopify-format orders every 2 seconds** (~90/min), routes each through the governance engine, and updates all KPIs in real-time.")
 
     c1, c2, c3 = st.columns([1, 1, 3])
     with c1:
@@ -784,20 +840,13 @@ with tab_live:
     with c3:
         if st.button("🗑 Clear History", use_container_width=True):
             st.session_state.live_orders = []
-            st.session_state.live_stats = {
-                'count': 0, 'rev_prevented': 0, 'margin_saved': 0,
-                'int_cost': 0, 'net_profit': 0, 'residual_loss': 0,
-                'ai_cancelled': 0, 'recoverable': 0, 'not_recoverable': 0,
-                'recovered': 0, 'auto_recoveries': 0, 'human_recoveries': 0,
-            }
+            st.session_state.live_stats = dict(_LIVE_DEFAULTS)
             st.rerun()
 
-    # ── Manual Order Entry ─────────────────────────────────────────────────────
+    # Manual Order Entry
     st.divider()
     st.markdown('<div class="section-header">✍️ Manual Order Entry — Submit Your Own Order</div>',
                 unsafe_allow_html=True)
-    st.markdown("Enter any order details below. The governance engine will route it through all 3 layers and update every KPI on the dashboard instantly.")
-
     with st.form("manual_order_form", clear_on_submit=True):
         col_a, col_b, col_c = st.columns(3)
         with col_a:
@@ -820,11 +869,7 @@ with tab_live:
     if submitted:
         import random as _r
         margin = m_margin / 100
-
-        # Layer 1 — AI cancel decision
         ai_cancel = m_ai_cancel
-
-        # Layer 2/3 routing (same logic as generate_live_order)
         tier = 'None'
         recoverable = False
         if ai_cancel:
@@ -833,16 +878,12 @@ with tab_live:
             elif margin > 0.40 or m_value > 3000:  tier = 'Human'
             else:                                  tier = 'Auto'
 
-        # Success probability by tier
         success_rate = {'Auto': 0.85, 'Human': 0.80}.get(tier, 0)
         success = ai_cancel and recoverable and (_r.random() < success_rate)
-
-        # Cost
         cost = 0
         if ai_cancel and recoverable:
             cost = 5 if m_value < 75 else (25 if tier == 'Human' else 15)
 
-        # Outcome label
         if not ai_cancel:        icon, label = '🟢', 'Fulfilled'
         elif not recoverable:    icon, label = '🔴', 'Not Recoverable'
         elif success:            icon, label = '🟢', 'Recovered ✓'
@@ -853,54 +894,39 @@ with tab_live:
 
         st.session_state.live_counter += 1
         o = {
-            'Order':   f'#MNL-{st.session_state.live_counter}',
-            'State':   m_state,   'Demand':  m_demand,
-            'Value':   f'${m_value:,.0f}',
-            'Margin':  f'{m_margin}%',
-            'Reason':  m_reason,  'Tier':    tier,
-            'Outcome': f'{icon} {label}',
-            '_rev_prevented':  rev_prevented,
-            '_margin_saved':   ms,
-            '_int_cost':       cost,
-            '_net_profit':     ms - cost,
-            '_residual_loss':  m_value if (recoverable and not success) else 0,
-            '_ai_cancelled':   1 if ai_cancel else 0,
-            '_recoverable':    1 if recoverable else 0,
-            '_not_recoverable':1 if (ai_cancel and not recoverable) else 0,
-            '_recovered':      1 if success else 0,
-            '_auto_recovery':  1 if (tier == 'Auto' and success) else 0,
+            'Order': f'#MNL-{st.session_state.live_counter}',
+            'State': m_state, 'Demand': m_demand,
+            'Value': f'${m_value:,.0f}', 'Margin': f'{m_margin}%',
+            'Reason': m_reason, 'Tier': tier, 'Outcome': f'{icon} {label}',
+            '_rev_prevented': rev_prevented, '_margin_saved': ms, '_int_cost': cost,
+            '_net_profit': ms - cost, '_residual_loss': m_value if (recoverable and not success) else 0,
+            '_ai_cancelled': 1 if ai_cancel else 0, '_recoverable': 1 if recoverable else 0,
+            '_not_recoverable': 1 if (ai_cancel and not recoverable) else 0,
+            '_recovered': 1 if success else 0,
+            '_auto_recovery': 1 if (tier == 'Auto' and success) else 0,
             '_human_recovery': 1 if (tier == 'Human' and success) else 0,
         }
 
-        # Push to live stream
         st.session_state.live_orders.insert(0, o)
         st.session_state.live_orders = st.session_state.live_orders[:50]
-
-        # Update ALL live stats
         ls2 = st.session_state.live_stats
-        ls2['count']            += 1
-        ls2['rev_prevented']    += o['_rev_prevented']
-        ls2['margin_saved']     += o['_margin_saved']
-        ls2['int_cost']         += o['_int_cost']
-        ls2['net_profit']       += o['_net_profit']
-        ls2['residual_loss']    += o['_residual_loss']
-        ls2['ai_cancelled']     += o['_ai_cancelled']
-        ls2['recoverable']      += o['_recoverable']
-        ls2['not_recoverable']  += o['_not_recoverable']
-        ls2['recovered']        += o['_recovered']
-        ls2['auto_recoveries']  += o['_auto_recovery']
-        ls2['human_recoveries'] += o['_human_recovery']
+        ls2['count']           += 1;  ls2['rev_prevented']   += o['_rev_prevented']
+        ls2['margin_saved']    += o['_margin_saved'];  ls2['int_cost']  += o['_int_cost']
+        ls2['net_profit']      += o['_net_profit'];    ls2['residual_loss'] += o['_residual_loss']
+        ls2['ai_cancelled']    += o['_ai_cancelled'];  ls2['recoverable']   += o['_recoverable']
+        ls2['not_recoverable'] += o['_not_recoverable']; ls2['recovered']  += o['_recovered']
+        ls2['auto_recoveries'] += o['_auto_recovery']; ls2['human_recoveries'] += o['_human_recovery']
 
-        # Show result card
         result_color = '#059669' if success else ('#f43f5e' if not recoverable else '#f59e0b')
         result_bg = '#f0fdf4' if success else ('#fff1f2' if not recoverable else '#fffbeb')
         st.markdown(f"""
-        <div style='background:{result_bg}; border:2px solid {result_color}; border-radius:14px; padding:18px; margin-top:12px; box-shadow:0 4px 12px rgba(0,0,0,0.06);'>
+        <div style='background:{result_bg}; border:2px solid {result_color}; border-radius:14px;
+             padding:18px; margin-top:12px; box-shadow:0 4px 12px rgba(0,0,0,0.06);'>
           <div style='font-size:18px; font-weight:700; color:{result_color};'>{icon} {label} — Order {o['Order']}</div>
           <div style='color:#64748b; margin-top:8px; font-size:13px;'>
             Value: <b style='color:#1e293b'>${m_value:,.0f}</b> &nbsp;|&nbsp;
             Margin: <b style='color:#1e293b'>{m_margin}%</b> &nbsp;|&nbsp;
-            Tier: <b style='color:#6366f1'>{tier}</b> &nbsp;|&nbsp;
+            Tier: <b style='color:#6C63FF'>{tier}</b> &nbsp;|&nbsp;
             State: <b style='color:#1e293b'>{m_state}</b>
           </div>
           <div style='color:#64748b; margin-top:6px; font-size:13px;'>
@@ -921,14 +947,13 @@ with tab_risk:
     st.markdown(
         sh("Residual Risk Analysis") +
         kr(
-            kc("Residual Recoverable Loss", fmt_money(C['residual_loss']),   "Revenue still at risk",                    "#fff1f2", "#e11d48", "#fecdd3"),
-            kc("Legitimate Non-Recoverable",f"{C['not_recoverable']:,}",    "Correctly left as-is",                     "#fafafa", "#6b7280", "#e5e7eb"),
-            kc("Successfully Recovered",    f"{C['recovered']:,}",          f"{C['recovery_rate_pool']*100:.1f}% of pool","#f0fdf4","#059669","#bbf7d0"),
-            kc("Net Revenue Protected",     fmt_money(C['rev_prevented']),   "Cumulative static + live",                 "#f0fdf4", "#059669", "#bbf7d0"),
+            kc("Residual Recoverable Loss", fmt_money(C['residual_loss']),    "Revenue still at risk",                    "#FFE6E6","#e11d48","#fecdd3","⚠️"),
+            kc("Legitimate Non-Recoverable",f"{C['not_recoverable']:,}",      "Correctly left as-is",                     "#F6F8FC","#6b7280","#e5e7eb","🚫"),
+            kc("Successfully Recovered",    f"{C['recovered']:,}",            f"{C['recovery_rate_pool']*100:.1f}% of pool","#E6F7EE","#059669","#bbf7d0","✅"),
+            kc("Net Revenue Protected",     fmt_money(C['rev_prevented']),    "Cumulative static + live",                 "#E6F7EE","#059669","#bbf7d0","💰"),
         ),
         unsafe_allow_html=True)
 
-    # Failure reason breakdown
     fail_df = df[
         df['intervention_failure_reason'].notna() &
         (df['intervention_failure_reason'] != 'None') &
@@ -982,21 +1007,267 @@ with tab_risk:
                         color_discrete_map={'ai_cancelled': '#fb7185', 'recovered': '#34d399'},
                         labels={'value': 'Orders', 'demand_level': 'Demand Level'})
     fig_demand.update_layout(**CHART_LAYOUT, height=280,
-                             legend=dict(
-                                 orientation='h',
-                                 yanchor='bottom', y=1.04,
-                                 xanchor='center', x=0.5,
-                                 bgcolor='rgba(255,255,255,0)',
-                                 font=dict(size=11, color='#374151'),
-                             ))
+                             legend=dict(orientation='h', yanchor='bottom', y=1.04,
+                                         xanchor='center', x=0.5, bgcolor='rgba(255,255,255,0)',
+                                         font=dict(size=11, color='#374151')))
     st.plotly_chart(fig_demand, use_container_width=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 6 — AGENT INTEL (NEW)
+# ══════════════════════════════════════════════════════════════════════════════
+with tab_agent_intel:
+    # Agent DB stats
+    st.markdown(
+        sh("Navedas Agent — Processed Order Stats") +
+        kr(
+            kc("Total Processed",  f"{agent_db['total']:,}",                "by governance agent",  "#F1F0FF","#6C63FF","#ddd6fe","🤖"),
+            kc("Recovered",        f"{agent_db['recovered']:,}",             "successful interventions","#E6F7EEe","#059669","#bbf7d0","✅"),
+            kc("Revenue Prevented",fmt_money(agent_db['rev_prevented']),     "from agent actions",   "#E6F7EE","#059669","#bbf7d0","💰"),
+            kc("Margin Saved",     fmt_money(agent_db['margin_saved']),      "gross profit",         "#E8F5E9","#059669","#bbf7d0","💹"),
+            kc("Net Profit",       fmt_money(agent_db['net_profit']),        "margin minus cost",    "#E6F7EE","#059669","#bbf7d0","📈"),
+        ),
+        unsafe_allow_html=True)
+
+    # Event Timeline
+    st.markdown('<div class="section-header">Event Timeline — Recent Agent Interventions</div>',
+                unsafe_allow_html=True)
+    events = get_recent_events(_DB_FILE, limit=20)
+
+    if not events:
+        st.info("No agent interventions yet. Use **+ Feed Orders** → **Run Agent** in the sidebar to process orders.")
+    else:
+        timeline_html = "<div style='display:flex;flex-direction:column;gap:8px;'>"
+        for ev in events:
+            result = ev.get('result', '')
+            is_success = result == 'SUCCESS'
+            dot_color = '#059669' if is_success else '#e11d48'
+            bg = '#E6F7EE' if is_success else '#FFE6E6'
+            border = '#bbf7d0' if is_success else '#fecdd3'
+            rev = float(ev.get('revenue_prevented') or 0)
+            ov  = float(ev.get('order_value') or 0)
+            rev_text = f"Revenue saved ${rev:,.0f}" if rev > 0 else f"Order value ${ov:,.0f}"
+
+            timeline_html += (
+                f"<div style='background:{bg};border:1px solid {border};border-radius:10px;"
+                f"padding:12px 16px;display:flex;gap:16px;align-items:flex-start;'>"
+                f"<div style='width:10px;height:10px;border-radius:50%;background:{dot_color};"
+                f"margin-top:4px;flex-shrink:0;'></div>"
+                f"<div style='flex:1;'>"
+                f"<div style='font-size:13px;font-weight:700;color:#1e293b;'>"
+                f"Order {ev['order_id']} &nbsp;·&nbsp; {ev['action_taken']}</div>"
+                f"<div style='font-size:12px;color:#64748b;margin-top:3px;'>"
+                f"Agent: <b>{ev['agent_type']}</b> &nbsp;·&nbsp; "
+                f"{ev['time'][:19] if ev['time'] else 'N/A'} &nbsp;·&nbsp; "
+                f"<b style='color:{dot_color}'>{result}</b> &nbsp;·&nbsp; {rev_text}</div>"
+                f"</div></div>"
+            )
+        timeline_html += "</div>"
+        st.markdown(timeline_html, unsafe_allow_html=True)
+
+    st.divider()
+
+    # Intervention type breakdown from agent DB
+    st.markdown('<div class="section-header">Agent Intervention Type Distribution</div>',
+                unsafe_allow_html=True)
+    try:
+        conn = sqlite3.connect(_DB_FILE)
+        int_types = pd.read_sql(
+            "SELECT intervention_type, COUNT(*) as count, SUM(revenue_prevented) as rev "
+            "FROM orders_processed GROUP BY intervention_type ORDER BY count DESC",
+            conn
+        )
+        conn.close()
+        if len(int_types) > 0:
+            col_i1, col_i2 = st.columns(2)
+            with col_i1:
+                fig_it = px.pie(int_types, values='count', names='intervention_type',
+                                color_discrete_sequence=['#6C63FF','#34d399','#f59e0b','#f472b6'],
+                                hole=0.4, title="By Count")
+                fig_it.update_layout(paper_bgcolor='rgba(255,255,255,0)', height=260,
+                                     font=dict(color='#475569'),
+                                     margin=dict(l=10,r=10,t=30,b=10))
+                st.plotly_chart(fig_it, use_container_width=True)
+            with col_i2:
+                fig_ir = px.bar(int_types, x='intervention_type', y='rev',
+                                color='intervention_type',
+                                color_discrete_sequence=['#6C63FF','#34d399','#f59e0b','#f472b6'],
+                                labels={'rev': 'Revenue Prevented ($)', 'intervention_type': 'Type'},
+                                title="Revenue Prevented by Type")
+                fig_ir.update_layout(**CHART_LAYOUT, height=260, showlegend=False,
+                                     margin=dict(l=40,r=20,t=40,b=40))
+                st.plotly_chart(fig_ir, use_container_width=True)
+        else:
+            st.info("Run the agent to see intervention distribution.")
+    except Exception:
+        st.info("Run the agent to see intervention distribution.")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 7 — ARCHITECTURE (NEW)
+# ══════════════════════════════════════════════════════════════════════════════
+with tab_arch:
+    st.markdown(sh("System Architecture — Navedas Governance Intelligence Platform"), unsafe_allow_html=True)
+
+    # Architecture diagram
+    st.markdown("""
+<div style='background:#ffffff;border:1px solid #e5e7eb;border-radius:16px;padding:32px 36px;
+            font-family:Inter,sans-serif;'>
+
+  <div style='display:flex;gap:0;align-items:stretch;'>
+
+    <!-- Column 1 -->
+    <div style='flex:1;text-align:center;'>
+      <div style='background:#E6F7EE;border:2px solid #bbf7d0;border-radius:12px;padding:18px;'>
+        <div style='font-size:24px;'>📦</div>
+        <div style='font-size:13px;font-weight:800;color:#059669;margin-top:6px;'>Synthetic Order Feed</div>
+        <div style='font-size:11px;color:#6b7280;margin-top:4px;'>synthetic_feed_generator.py</div>
+        <div style='font-size:11px;color:#374151;margin-top:8px;line-height:1.6;'>
+          Inserts ecommerce orders into <b>orders_feed</b> table every few seconds
+        </div>
+      </div>
+      <div style='font-size:24px;color:#6C63FF;margin:8px 0;'>↓</div>
+    </div>
+
+    <div style='width:24px;'></div>
+
+    <!-- Column 2 -->
+    <div style='flex:1;text-align:center;'>
+      <div style='background:#F1F0FF;border:2px solid #ddd6fe;border-radius:12px;padding:18px;'>
+        <div style='font-size:24px;'>🤖</div>
+        <div style='font-size:13px;font-weight:800;color:#6C63FF;margin-top:6px;'>Navedas Governance Agent</div>
+        <div style='font-size:11px;color:#6b7280;margin-top:4px;'>navedas_agent.py</div>
+        <div style='font-size:11px;color:#374151;margin-top:8px;line-height:1.6;'>
+          Polls feed every 15s · Applies 4 governance rules · Writes intervention results
+        </div>
+      </div>
+      <div style='font-size:24px;color:#6C63FF;margin:8px 0;'>↓</div>
+    </div>
+
+    <div style='width:24px;'></div>
+
+    <!-- Column 3 -->
+    <div style='flex:1;text-align:center;'>
+      <div style='background:#fffbeb;border:2px solid #fde68a;border-radius:12px;padding:18px;'>
+        <div style='font-size:24px;'>🗄️</div>
+        <div style='font-size:13px;font-weight:800;color:#d97706;margin-top:6px;'>Intervention Database</div>
+        <div style='font-size:11px;color:#6b7280;margin-top:4px;'>SQLite (governance.db)</div>
+        <div style='font-size:11px;color:#374151;margin-top:8px;line-height:1.6;'>
+          <b>orders_feed</b> · <b>orders_processed</b> · <b>intervention_log</b> · <b>orders</b>
+        </div>
+      </div>
+      <div style='font-size:24px;color:#6C63FF;margin:8px 0;'>↓</div>
+    </div>
+
+    <div style='width:24px;'></div>
+
+    <!-- Column 4 -->
+    <div style='flex:1;text-align:center;'>
+      <div style='background:#FFE6E6;border:2px solid #fecdd3;border-radius:12px;padding:18px;'>
+        <div style='font-size:24px;'>📊</div>
+        <div style='font-size:13px;font-weight:800;color:#e11d48;margin-top:6px;'>Governance Dashboard</div>
+        <div style='font-size:11px;color:#6b7280;margin-top:4px;'>app.py (Streamlit)</div>
+        <div style='font-size:11px;color:#374151;margin-top:8px;line-height:1.6;'>
+          Visualization only · Reads DB · Auto-refreshes every 5s · SaaS UI
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+""", unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # DB Schema
+    col_s1, col_s2 = st.columns(2)
+
+    with col_s1:
+        st.markdown(sh("Database Schema"), unsafe_allow_html=True)
+        schema_html = ""
+        tables = {
+            "orders_feed": ["order_id PK", "order_value", "margin_percent", "ai_cancel_flag",
+                            "cancellation_reason", "vendor_split_possible", "created_at", "processed_flag"],
+            "orders_processed": ["id PK", "order_id", "intervention_type", "intervention_success",
+                                  "revenue_prevented", "margin_saved", "intervention_cost",
+                                  "net_profit_impact", "agent_type", "timestamp"],
+            "intervention_log": ["intervention_id PK", "order_id", "action_taken", "agent_type",
+                                  "intervention_time", "intervention_result"],
+        }
+        for tbl, cols in tables.items():
+            schema_html += (
+                f"<div style='background:#f8f7ff;border:1px solid #e8e6ff;border-radius:10px;"
+                f"padding:12px 16px;margin-bottom:10px;'>"
+                f"<div style='font-size:12px;font-weight:800;color:#6C63FF;margin-bottom:8px;'>{tbl}</div>"
+                f"<div style='font-size:11px;color:#374151;line-height:1.8;'>" +
+                "<br>".join(f"&nbsp;&nbsp;{c}" for c in cols) +
+                "</div></div>"
+            )
+        st.markdown(schema_html, unsafe_allow_html=True)
+
+    with col_s2:
+        st.markdown(sh("Governance Rules"), unsafe_allow_html=True)
+        rules_data = [
+            ("Rule 1", "Auto Refund",       "order_value &lt; $75",              "$5",   "96%", "#E6F7EE","#059669"),
+            ("Rule 2", "Split Fulfillment", "vendor_split_possible = true",      "$15",  "85%", "#E6F7EE","#059669"),
+            ("Rule 3", "Human Agent",       "margin_percent &gt; 40% or value &gt; $3K","$25","80%","#fffbeb","#d97706"),
+            ("Rule 4", "Retry Payment",     "cancellation_reason = Payment Expired","$8", "72%","#F1F0FF","#6C63FF"),
+        ]
+        for rule, action, condition, cost, success, bg, color in rules_data:
+            st.markdown(
+                f"<div style='background:{bg};border-radius:10px;padding:12px 16px;margin-bottom:8px;'>"
+                f"<div style='font-size:11px;font-weight:800;color:{color};margin-bottom:4px;'>{rule} — {action}</div>"
+                f"<div style='font-size:11px;color:#374151;'>If: <code>{condition}</code></div>"
+                f"<div style='font-size:11px;color:#6b7280;margin-top:3px;'>Cost: <b>{cost}</b> &nbsp;·&nbsp; Success: <b>{success}</b></div>"
+                f"</div>",
+                unsafe_allow_html=True
+            )
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown(sh("Governance Health Score Formula"), unsafe_allow_html=True)
+        st.markdown("""
+<div style='background:#F1F0FF;border:1px solid #ddd6fe;border-radius:10px;padding:16px;font-size:12px;color:#374151;line-height:1.9;'>
+  GHS = (<b>RecoveryEfficiency</b> × 0.40)<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ (<b>ResidualLossControl</b> × 0.30)<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ (<b>SLACompliance</b> × 0.20)<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ (<b>AgentSuccessRate</b> × 0.10)<br><br>
+  <b>Bands:</b>&nbsp; 90–100 Excellent &nbsp;·&nbsp; 75–89 Healthy &nbsp;·&nbsp; 60–74 Warning &nbsp;·&nbsp; &lt;60 Critical
+</div>
+""", unsafe_allow_html=True)
+
+    # Live DB status
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown(sh("Live Database Status"), unsafe_allow_html=True)
+    try:
+        conn = sqlite3.connect(_DB_FILE)
+        ensure_schema(conn)
+        stats = {}
+        for tbl in ['orders', 'orders_feed', 'orders_processed', 'intervention_log']:
+            try:
+                count = conn.execute(f"SELECT COUNT(*) FROM {tbl}").fetchone()[0]
+                stats[tbl] = count
+            except Exception:
+                stats[tbl] = 0
+        conn.close()
+        st.markdown(
+            kr(
+                kc("orders (base)",       f"{stats['orders']:,}",             "historical dataset", "#F6F8FC","#6b7280","#e5e7eb"),
+                kc("orders_feed",         f"{stats['orders_feed']:,}",        "synthetic feed",     "#E6F7EE","#059669","#bbf7d0"),
+                kc("orders_processed",    f"{stats['orders_processed']:,}",   "agent processed",    "#F1F0FF","#6C63FF","#ddd6fe"),
+                kc("intervention_log",    f"{stats['intervention_log']:,}",   "event log entries",  "#fffbeb","#d97706","#fde68a"),
+            ),
+            unsafe_allow_html=True)
+    except Exception as e:
+        st.warning(f"DB status unavailable: {e}")
 
 
 # ── Footer ─────────────────────────────────────────────────────────────────────
 st.markdown("---")
 st.markdown(
     "<p style='text-align:center; color:#94a3b8; font-size:12px;'>"
-    "Navedas Governance Intelligence Platform · All financials in USD · EST timezone · Production-grade"
+    "Navedas Governance Intelligence Platform v2.0 &nbsp;·&nbsp; "
+    "All financials in USD &nbsp;·&nbsp; EST timezone &nbsp;·&nbsp; Production-grade"
     "</p>",
     unsafe_allow_html=True
 )

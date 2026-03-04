@@ -8,6 +8,31 @@ import sqlite3
 import os
 import tempfile
 
+
+def _ensure_extended_schema(conn: sqlite3.Connection) -> None:
+    """Create orders_feed / orders_processed / intervention_log if absent."""
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS orders_feed (
+            order_id TEXT PRIMARY KEY, order_value REAL, margin_percent REAL,
+            ai_cancel_flag INTEGER DEFAULT 0, cancellation_reason TEXT,
+            vendor_split_possible INTEGER DEFAULT 0,
+            created_at TEXT, processed_flag INTEGER DEFAULT 0
+        );
+        CREATE TABLE IF NOT EXISTS orders_processed (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, order_id TEXT,
+            intervention_type TEXT, intervention_success INTEGER,
+            revenue_prevented REAL, margin_saved REAL,
+            intervention_cost REAL, net_profit_impact REAL,
+            agent_type TEXT, timestamp TEXT
+        );
+        CREATE TABLE IF NOT EXISTS intervention_log (
+            intervention_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id TEXT, action_taken TEXT, agent_type TEXT,
+            intervention_time TEXT, intervention_result TEXT
+        );
+    """)
+    conn.commit()
+
 US_STATES = ['CA', 'TX', 'NY', 'FL', 'IL', 'PA', 'OH', 'GA', 'NC', 'MI',
              'NJ', 'VA', 'WA', 'AZ', 'MA', 'TN', 'IN', 'MO', 'MD', 'WI']
 CANCELLATION_REASONS = [
@@ -158,6 +183,7 @@ def load_csv_to_db(csv_content: str) -> str:
     df['order_date'] = df['order_date'].astype(str)
     conn = sqlite3.connect(_DB_FILE)
     df.to_sql('orders', conn, if_exists='replace', index=False)
+    _ensure_extended_schema(conn)
     conn.close()
     return _DB_FILE
 
@@ -184,6 +210,7 @@ def db_exists(db_path: str = _DB_FILE) -> bool:
     try:
         conn = sqlite3.connect(db_path)
         count = conn.execute("SELECT COUNT(*) FROM orders").fetchone()[0]
+        _ensure_extended_schema(conn)
         conn.close()
         return count > 0
     except Exception:
