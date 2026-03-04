@@ -475,9 +475,9 @@ with tab_overview:
             x=["Baseline", "AI Loss", "After AI Only", "Gov Recovery", "Residual Loss", "Net Revenue"],
             y=[baseline, -kpis['revenue_lost_ai'], 0, C['rev_prevented'], -C['residual_loss'], 0],
             connector={"line": {"color": "#e2e8f0"}},
-            decreasing={"marker": {"color": "#f43f5e"}},
-            increasing={"marker": {"color": "#10b981"}},
-            totals={"marker": {"color": "#6366f1"}},
+            decreasing={"marker": {"color": "#fb7185"}},
+            increasing={"marker": {"color": "#34d399"}},
+            totals={"marker": {"color": "#818cf8"}},
             text=[f"${v/1e6:.2f}M" if abs(v) > 1e6 else f"${v:,.0f}" for v in vals],
             textposition="inside", insidetextanchor="middle",
             textfont=dict(color="white", size=12, family="Inter"),
@@ -558,7 +558,7 @@ with tab_governance:
         st.markdown(sh("Recovery Trend & ROI Over Time"), unsafe_allow_html=True)
         fig_ts = go.Figure()
         fig_ts.add_trace(go.Bar(x=ts['month_label'], y=ts['margin_saved'],
-                                name='Margin Saved', marker_color='#818cf8', opacity=0.8))
+                                name='Margin Saved', marker_color='#a78bfa', opacity=0.85))
         fig_ts.add_trace(go.Scatter(x=ts['month_label'], y=ts['roi'],
                                     name='ROI', line=dict(color='#fbbf24', width=2.5),
                                     yaxis='y2', mode='lines+markers',
@@ -582,11 +582,11 @@ with tab_governance:
         st.markdown(sh("Monthly Financial Impact"), unsafe_allow_html=True)
         fig_bar = go.Figure()
         fig_bar.add_trace(go.Bar(x=ts['month_label'], y=ts['rev_prevented'],
-                                 name='Revenue Prevented', marker_color='#10b981', opacity=0.8))
+                                 name='Revenue Prevented', marker_color='#34d399', opacity=0.85))
         fig_bar.add_trace(go.Bar(x=ts['month_label'], y=ts['margin_saved'],
-                                 name='Margin Saved', marker_color='#818cf8', opacity=0.8))
+                                 name='Margin Saved', marker_color='#818cf8', opacity=0.85))
         fig_bar.add_trace(go.Bar(x=ts['month_label'], y=ts['int_cost'],
-                                 name='Int. Cost', marker_color='#f59e0b', opacity=0.8))
+                                 name='Int. Cost', marker_color='#fbbf24', opacity=0.85))
         fig_bar.update_layout(**CHART_LAYOUT, height=320, barmode='group',
                               legend=dict(
                                   orientation='h',
@@ -670,7 +670,7 @@ with tab_agents:
 
     # Leaderboard bar chart (static proportions, updated total counts)
     fig_lb = go.Figure()
-    colors = ['#6366f1' if t == 'Auto' else '#f59e0b' for t in agents_df['Type']]
+    colors = ['#818cf8' if t == 'Auto' else '#f472b6' for t in agents_df['Type']]
     fig_lb.add_trace(go.Bar(
         x=agents_df['Margin Saved'], y=agents_df['Agent'],
         orientation='h', marker_color=colors,
@@ -921,12 +921,13 @@ with tab_risk:
             fig_fail = go.Figure(go.Bar(
                 x=fail_df['count'], y=fail_df['intervention_failure_reason'],
                 orientation='h',
-                marker_color=['#f43f5e', '#f59e0b', '#6366f1', '#fb923c'][:len(fail_df)],
+                marker_color=['#a78bfa', '#60a5fa', '#818cf8', '#f472b6'][:len(fail_df)],
                 text=fail_df['count'], textposition='outside',
                 textfont=dict(color='#64748b', size=11)
             ))
             fig_fail.update_layout(**CHART_LAYOUT, height=280, showlegend=False)
-            fig_fail.update_layout(margin=dict(l=40, r=55, t=20, b=20))
+            fig_fail.update_layout(margin=dict(l=40, r=60, t=20, b=20))
+            fig_fail.update_xaxes(range=[0, int(fail_df['count'].max() * 1.22)])
             st.plotly_chart(fig_fail, use_container_width=True)
 
     with col_fi:
@@ -954,7 +955,7 @@ with tab_risk:
     ).reset_index()
     fig_demand = px.bar(demand_df, x='demand_level', y=['ai_cancelled', 'recovered'],
                         barmode='group',
-                        color_discrete_map={'ai_cancelled': '#f43f5e', 'recovered': '#10b981'},
+                        color_discrete_map={'ai_cancelled': '#fb7185', 'recovered': '#34d399'},
                         labels={'value': 'Orders', 'demand_level': 'Demand Level'})
     fig_demand.update_layout(**CHART_LAYOUT, height=280,
                              legend=dict(
