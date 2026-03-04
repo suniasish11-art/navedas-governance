@@ -160,6 +160,16 @@ st.markdown("""
     padding-bottom: 8px !important; border-bottom: 2px solid #ede9fe !important;
   }
 
+  /* ── Plotly chart card containers ── */
+  [data-testid="stPlotlyChart"] {
+    background: #ffffff !important;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 14px !important;
+    padding: 12px 8px 4px 8px !important;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05) !important;
+    margin-bottom: 4px !important;
+  }
+
   /* ── Dividers ── */
   hr { border-color: #e5e7eb !important; }
 
@@ -176,14 +186,14 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 CHART_LAYOUT = dict(
-    paper_bgcolor='rgba(255,255,255,0)', plot_bgcolor='rgba(248,250,252,1)',
+    paper_bgcolor='rgba(255,255,255,0)', plot_bgcolor='rgba(255,255,255,1)',
     font=dict(color='#475569', family='Inter'),
     margin=dict(l=40, r=20, t=30, b=40),
     xaxis=dict(gridcolor='#e2e8f0', showgrid=True, color='#64748b'),
     yaxis=dict(gridcolor='#e2e8f0', showgrid=True, color='#64748b'),
 )
 BASE_LAYOUT = dict(
-    paper_bgcolor='rgba(255,255,255,0)', plot_bgcolor='rgba(248,250,252,1)',
+    paper_bgcolor='rgba(255,255,255,0)', plot_bgcolor='rgba(255,255,255,1)',
     font=dict(color='#475569', family='Inter'),
 )
 
@@ -508,7 +518,7 @@ with tab_overview:
             text=f"${C['int_cost']:,.0f}<br><span style='font-size:10px;color:#64748b'>Int. Cost</span>",
             xref="paper", yref="paper", x=0.75, y=0.1, showarrow=False,
             font=dict(color='#f59e0b', size=11), align='center')
-        fig_g.update_layout(paper_bgcolor='rgba(255,255,255,0)', plot_bgcolor='rgba(248,250,252,1)',
+        fig_g.update_layout(paper_bgcolor='rgba(255,255,255,0)', plot_bgcolor='rgba(255,255,255,1)',
                             height=320, margin=dict(l=20, r=20, t=30, b=10),
                             font=dict(color='#475569'))
         st.plotly_chart(fig_g, use_container_width=True)
@@ -545,7 +555,7 @@ with tab_governance:
     # ROI + Margin trend
     col_t, col_m = st.columns(2)
     with col_t:
-        st.markdown('<div class="section-header">Recovery Trend & ROI Over Time</div>', unsafe_allow_html=True)
+        st.markdown(sh("Recovery Trend & ROI Over Time"), unsafe_allow_html=True)
         fig_ts = go.Figure()
         fig_ts.add_trace(go.Bar(x=ts['month_label'], y=ts['margin_saved'],
                                 name='Margin Saved', marker_color='#818cf8', opacity=0.8))
@@ -563,7 +573,7 @@ with tab_governance:
         st.plotly_chart(fig_ts, use_container_width=True)
 
     with col_m:
-        st.markdown('<div class="section-header">Monthly Financial Impact</div>', unsafe_allow_html=True)
+        st.markdown(sh("Monthly Financial Impact"), unsafe_allow_html=True)
         fig_bar = go.Figure()
         fig_bar.add_trace(go.Bar(x=ts['month_label'], y=ts['rev_prevented'],
                                  name='Revenue Prevented', marker_color='#10b981', opacity=0.8))
@@ -590,25 +600,34 @@ with tab_governance:
             marker_color=funnel_data['Color'],
             connector={"line": {"color": "#e2e8f0", "width": 2}}
         ))
-        fig_funnel.update_layout(paper_bgcolor='rgba(255,255,255,0)', plot_bgcolor='rgba(248,250,252,1)',
+        fig_funnel.update_layout(paper_bgcolor='rgba(255,255,255,0)', plot_bgcolor='rgba(255,255,255,1)',
                                   height=280, margin=dict(l=20, r=20, t=10, b=10),
                                   font=dict(color='#475569'))
         st.plotly_chart(fig_funnel, use_container_width=True)
 
     with col_r:
-        st.markdown('<div class="section-header">Governance Routing Engine — $75 Threshold</div>',
-                    unsafe_allow_html=True)
-        routing_data = [
-            {"Tier": "Layer 2 — Auto (<$75)",        "Action": "Full Auto Refund",    "Cost": "$5",  "Success": "96%", "color": "🔵"},
-            {"Tier": "Layer 2 — Auto (Medium Risk)",  "Action": "Split / Partial Auto","Cost": "$15", "Success": "85%", "color": "🔵"},
-            {"Tier": "Layer 3 — Human (High Risk)",   "Action": "Human Review Queue",  "Cost": "$25", "Success": "80%", "color": "🟡"},
+        routing_rows = [
+            ("#eff6ff", "#bfdbfe", "#1d4ed8", "Layer 2 — Auto (&lt;$75)",       "Full Auto Refund",     "$5",  "96%"),
+            ("#eff6ff", "#bfdbfe", "#1d4ed8", "Layer 2 — Auto (Medium Risk)",   "Split / Partial Auto", "$15", "85%"),
+            ("#fffbeb", "#fde68a", "#d97706", "Layer 3 — Human (High Risk)",    "Human Review Queue",   "$25", "80%"),
         ]
-        for r in routing_data:
-            with st.expander(f"{r['color']} {r['Tier']}"):
-                c1, c2, c3 = st.columns(3)
-                c1.markdown(f"**Action**  \n{r['Action']}")
-                c2.markdown(f"**Avg Cost**  \n{r['Cost']}")
-                c3.markdown(f"**Success Rate**  \n{r['Success']}")
+        rhtml = sh("Governance Routing Engine — $75 Threshold")
+        for bg, brd, clr, tier, action, cost, success in routing_rows:
+            rhtml += (
+                f"<div style='background:{bg};border:1px solid {brd};border-radius:12px;"
+                f"padding:16px 18px;margin-bottom:10px;'>"
+                f"<div style='font-size:12px;font-weight:700;color:{clr};margin-bottom:10px;'>"
+                f"<span style='font-size:14px;margin-right:6px;'>&#9679;</span>{tier}</div>"
+                f"<div style='display:flex;gap:28px;'>"
+                f"<div><div style='font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;'>Action</div>"
+                f"<div style='font-size:13px;font-weight:600;color:#374151;margin-top:3px;'>{action}</div></div>"
+                f"<div><div style='font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;'>Avg Cost</div>"
+                f"<div style='font-size:13px;font-weight:600;color:#374151;margin-top:3px;'>{cost}</div></div>"
+                f"<div><div style='font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;'>Success Rate</div>"
+                f"<div style='font-size:14px;font-weight:800;color:{clr};margin-top:3px;'>{success}</div></div>"
+                f"</div></div>"
+            )
+        st.markdown(rhtml, unsafe_allow_html=True)
 
     # Net profit by reason (static CSV — cancellation reasons don't change live)
     st.markdown('<div class="section-header">Net Profit Impact by Cancellation Reason</div>',
