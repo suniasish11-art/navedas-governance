@@ -565,6 +565,7 @@ with tab_governance:
                                     marker=dict(color='#fbbf24', size=6)))
         fig_ts.update_layout(
             **BASE_LAYOUT, height=300,
+            margin=dict(l=50, r=75, t=50, b=40),
             yaxis=dict(title='Margin Saved ($)', gridcolor='#e2e8f0', showgrid=True, color='#64748b'),
             yaxis2=dict(title='ROI (x)', overlaying='y', side='right', gridcolor='#e2e8f0', color='#64748b'),
             xaxis=dict(gridcolor='#e2e8f0', showgrid=True, color='#64748b'),
