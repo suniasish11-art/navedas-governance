@@ -15,7 +15,7 @@ from pipeline import (
     compute_agent_stats, generate_live_order,
     load_csv_to_db, load_from_db, db_exists, _DB_FILE
 )
-import sqlite3
+from db import get_conn, get_engine
 
 try:
     from governance_engine import compute_governance_health_score
@@ -277,7 +277,7 @@ if st.session_state.auto_agent:
     _should_run = (_last is None) or ((_now - _last).total_seconds() >= 25)
     if _should_run:
         try:
-            _conn = sqlite3.connect(_DB_FILE)
+            _conn = get_conn(_DB_FILE)
             ensure_schema(_conn)
             st.session_state.feed_counter += 1
             _batch = [generate_order(st.session_state.feed_counter * 100 + _i) for _i in range(5)]
@@ -365,7 +365,7 @@ with st.sidebar:
     with col_a:
         if st.button("+ Feed Orders", use_container_width=True):
             try:
-                conn = sqlite3.connect(_DB_FILE)
+                conn = get_conn(_DB_FILE)
                 ensure_schema(conn)
                 st.session_state.feed_counter += 1
                 batch = [generate_order(st.session_state.feed_counter * 100 + i) for i in range(10)]
@@ -1143,13 +1143,12 @@ with tab_agent_intel:
     st.markdown('<div class="section-header">Agent Intervention Type Distribution</div>',
                 unsafe_allow_html=True)
     try:
-        conn = sqlite3.connect(_DB_FILE)
+        engine = get_engine()
         int_types = pd.read_sql(
             "SELECT intervention_type, COUNT(*) as count, SUM(revenue_prevented) as rev "
             "FROM orders_processed GROUP BY intervention_type ORDER BY count DESC",
-            conn
+            engine
         )
-        conn.close()
         if len(int_types) > 0:
             col_i1, col_i2 = st.columns(2)
             with col_i1:
@@ -1277,7 +1276,7 @@ with tab_arch:
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown(sh("Live Database Status"), unsafe_allow_html=True)
     try:
-        conn = sqlite3.connect(_DB_FILE)
+        conn = get_conn(_DB_FILE)
         ensure_schema(conn)
         stats = {}
         for tbl in ['orders', 'orders_feed', 'orders_processed', 'intervention_log']:

@@ -3,15 +3,14 @@ synthetic_feed_generator.py — Navedas Static Order Feed
 Inserts synthetic ecommerce orders into orders_feed table.
 Can be run as a standalone process or called from navedas_agent.py.
 """
-import sqlite3
 import random
 import time
 import datetime
 import os
-import tempfile
+from db import get_conn, SQLITE_PATH
 
-# ── DB path (shared across all modules) ───────────────────────────────────────
-_DB_FILE = os.path.join(tempfile.gettempdir(), 'navedas_governance.db')
+# ── DB path ────────────────────────────────────────────────────────────────────
+_DB_FILE = SQLITE_PATH
 
 US_STATES = [
     'CA', 'TX', 'NY', 'FL', 'IL', 'PA', 'OH', 'GA', 'NC', 'MI',
@@ -25,7 +24,7 @@ CANCELLATION_REASONS = [
 ]
 
 
-def ensure_schema(conn: sqlite3.Connection) -> None:
+def ensure_schema(conn) -> None:
     """Create orders_feed, orders_processed, intervention_log if they don't exist."""
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS orders_feed (
@@ -86,7 +85,7 @@ def generate_order(counter: int) -> dict:
     }
 
 
-def insert_orders_batch(conn: sqlite3.Connection, orders: list) -> None:
+def insert_orders_batch(conn, orders: list) -> None:
     """Insert a batch of orders into orders_feed (ignore duplicates)."""
     conn.executemany(
         """INSERT OR IGNORE INTO orders_feed
@@ -101,7 +100,7 @@ def insert_orders_batch(conn: sqlite3.Connection, orders: list) -> None:
     conn.commit()
 
 
-def get_feed_stats(conn: sqlite3.Connection) -> dict:
+def get_feed_stats(conn) -> dict:
     """Return quick stats about the feed table."""
     total     = conn.execute("SELECT COUNT(*) FROM orders_feed").fetchone()[0]
     pending   = conn.execute("SELECT COUNT(*) FROM orders_feed WHERE processed_flag=0").fetchone()[0]
@@ -117,7 +116,7 @@ def run_feed(db_path: str = _DB_FILE,
     Main feed loop. Inserts `batch_size` orders every `interval_seconds`.
     Runs indefinitely unless max_orders > 0.
     """
-    conn = sqlite3.connect(db_path)
+    conn = get_conn(db_path)
     ensure_schema(conn)
 
     # Seed counter from existing rows

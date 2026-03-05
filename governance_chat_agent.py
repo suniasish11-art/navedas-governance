@@ -7,11 +7,10 @@ Usage:
     from governance_chat_agent import ask
     response = ask("How much revenue was saved?")
 """
-import sqlite3
 import os
-import tempfile
+from db import get_conn, SQLITE_PATH
 
-_DB_FILE = os.path.join(tempfile.gettempdir(), 'navedas_governance.db')
+_DB_FILE = SQLITE_PATH
 
 # ── Intent patterns ────────────────────────────────────────────────────────────
 INTENT_PATTERNS = {
@@ -99,7 +98,7 @@ def _fmt(v: float) -> str:
 
 def _one(db_path: str, sql: str, params: tuple = ()) -> tuple:
     try:
-        conn = sqlite3.connect(db_path)
+        conn = get_conn(db_path)
         row  = conn.execute(sql, params).fetchone()
         conn.close()
         return row or ()
@@ -109,7 +108,7 @@ def _one(db_path: str, sql: str, params: tuple = ()) -> tuple:
 
 def _many(db_path: str, sql: str, params: tuple = ()) -> list:
     try:
-        conn = sqlite3.connect(db_path)
+        conn = get_conn(db_path)
         rows = conn.execute(sql, params).fetchall()
         conn.close()
         return rows

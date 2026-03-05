@@ -6,23 +6,22 @@ writes results to orders_processed + intervention_log, marks as processed.
 Run standalone:  python navedas_agent.py
 Or import and call run_agent_cycle() for a single pass.
 """
-import sqlite3
 import time
 import os
-import tempfile
 from datetime import datetime
 
 from governance_engine import apply_governance_rules
 from synthetic_feed_generator import ensure_schema
+from db import get_conn, SQLITE_PATH
 
 # ── Shared DB path ─────────────────────────────────────────────────────────────
-_DB_FILE = os.path.join(tempfile.gettempdir(), 'navedas_governance.db')
+_DB_FILE = SQLITE_PATH
 
 POLL_INTERVAL_SECONDS = 15
 BATCH_LIMIT           = 50   # max orders processed per cycle
 
 
-def fetch_unprocessed(conn: sqlite3.Connection, limit: int = BATCH_LIMIT) -> list:
+def fetch_unprocessed(conn, limit: int = BATCH_LIMIT) -> list:
     """Return up to `limit` unprocessed orders from orders_feed."""
     rows = conn.execute(
         """SELECT order_id, order_value, margin_percent, ai_cancel_flag,
@@ -38,7 +37,7 @@ def fetch_unprocessed(conn: sqlite3.Connection, limit: int = BATCH_LIMIT) -> lis
     return [dict(zip(keys, row)) for row in rows]
 
 
-def write_processed(conn: sqlite3.Connection, result: dict) -> None:
+def write_processed(conn, result: dict) -> None:
     """Insert one processed result into orders_processed."""
     conn.execute(
         """INSERT INTO orders_processed
@@ -60,7 +59,7 @@ def write_processed(conn: sqlite3.Connection, result: dict) -> None:
     )
 
 
-def write_intervention_log(conn: sqlite3.Connection, result: dict) -> None:
+def write_intervention_log(conn, result: dict) -> None:
     """Insert one entry into intervention_log."""
     outcome = 'SUCCESS' if result['intervention_success'] else 'FAILED'
     conn.execute(
@@ -77,7 +76,7 @@ def write_intervention_log(conn: sqlite3.Connection, result: dict) -> None:
     )
 
 
-def mark_processed(conn: sqlite3.Connection, order_ids: list) -> None:
+def mark_processed(conn, order_ids: list) -> None:
     """Set processed_flag = 1 for a list of order_ids."""
     conn.executemany(
         "UPDATE orders_feed SET processed_flag = 1 WHERE order_id = ?",
@@ -94,7 +93,7 @@ def run_agent_cycle(db_path: str = _DB_FILE) -> dict:
     4. Mark as processed
     Returns summary dict.
     """
-    conn = sqlite3.connect(db_path)
+    conn = get_conn(db_path)
     ensure_schema(conn)
 
     orders = fetch_unprocessed(conn)
@@ -132,7 +131,7 @@ def get_agent_summary(db_path: str = _DB_FILE) -> dict:
     Return aggregate stats from orders_processed for dashboard use.
     """
     try:
-        conn = sqlite3.connect(db_path)
+        conn = get_conn(db_path)
         ensure_schema(conn)
         row = conn.execute(
             """SELECT
@@ -165,7 +164,7 @@ def get_recent_events(db_path: str = _DB_FILE, limit: int = 20) -> list:
     Return recent intervention events for the Event Timeline tab.
     """
     try:
-        conn = sqlite3.connect(db_path)
+        conn = get_conn(db_path)
         rows = conn.execute(
             """SELECT il.order_id, il.action_taken, il.agent_type,
                       il.intervention_time, il.intervention_result,
@@ -187,7 +186,7 @@ def get_recent_events(db_path: str = _DB_FILE, limit: int = 20) -> list:
 def get_feed_pending_count(db_path: str = _DB_FILE) -> int:
     """Return count of unprocessed orders in the feed."""
     try:
-        conn = sqlite3.connect(db_path)
+        conn = get_conn(db_path)
         count = conn.execute(
             "SELECT COUNT(*) FROM orders_feed WHERE processed_flag = 0"
         ).fetchone()[0]
@@ -203,7 +202,7 @@ def run_agent(db_path: str = _DB_FILE,
     Continuous agent loop. Runs forever until interrupted.
     """
     print(f"[NavedasAgent] Starting — DB: {db_path}")
-    conn = sqlite3.connect(db_path)
+    conn = get_conn(db_path)
     ensure_schema(conn)
     conn.close()
 

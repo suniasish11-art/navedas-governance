@@ -4,12 +4,12 @@ import numpy as np
 import random
 import io
 import datetime
-import sqlite3
 import os
 import tempfile
+from db import get_conn, get_engine, is_neon, SQLITE_PATH
 
 
-def _ensure_extended_schema(conn: sqlite3.Connection) -> None:
+def _ensure_extended_schema(conn) -> None:
     """Create orders_feed / orders_processed / intervention_log if absent."""
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS orders_feed (
@@ -173,26 +173,26 @@ def compute_agent_stats(df: pd.DataFrame) -> pd.DataFrame:
     return df_out.sort_values('Margin Saved', ascending=False).reset_index(drop=True)
 
 
-_DB_FILE = os.path.join(tempfile.gettempdir(), 'navedas_governance.db')
+_DB_FILE = SQLITE_PATH
 
 
 def load_csv_to_db(csv_content: str) -> str:
-    """Parse CSV → clean DataFrame → insert into SQLite. Returns db_path."""
+    """Parse CSV → clean DataFrame → insert into DB (Neon or SQLite). Returns db_path."""
     df = load_data(csv_content)
-    # Convert period/datetime back to strings for SQLite storage
     df['order_date'] = df['order_date'].astype(str)
-    conn = sqlite3.connect(_DB_FILE)
-    df.to_sql('orders', conn, if_exists='replace', index=False)
+    engine = get_engine()
+    df.to_sql('orders', engine, if_exists='replace', index=False)
+    conn = get_conn()
     _ensure_extended_schema(conn)
+    conn.commit()
     conn.close()
     return _DB_FILE
 
 
 def load_from_db(db_path: str = _DB_FILE) -> pd.DataFrame:
-    """Load orders table from SQLite and return a clean DataFrame."""
-    conn = sqlite3.connect(db_path)
-    df = pd.read_sql('SELECT * FROM orders', conn)
-    conn.close()
+    """Load orders table from DB and return a clean DataFrame."""
+    engine = get_engine()
+    df = pd.read_sql('SELECT * FROM orders', engine)
     df['order_date'] = pd.to_datetime(df['order_date'], errors='coerce')
     for col in INT_COLS:
         if col in df.columns:
@@ -204,15 +204,17 @@ def load_from_db(db_path: str = _DB_FILE) -> pd.DataFrame:
 
 
 def db_exists(db_path: str = _DB_FILE) -> bool:
-    """Return True if the DB file exists and has the orders table."""
-    if not os.path.exists(db_path):
+    """Return True if the DB has the orders table with data."""
+    # For SQLite: check file exists first
+    if not is_neon() and not os.path.exists(db_path):
         return False
     try:
-        conn = sqlite3.connect(db_path)
+        conn = get_conn(db_path)
         count = conn.execute("SELECT COUNT(*) FROM orders").fetchone()[0]
         _ensure_extended_schema(conn)
+        conn.commit()
         conn.close()
-        return count > 0
+        return (count or 0) > 0
     except Exception:
         return False
 
