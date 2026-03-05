@@ -32,6 +32,19 @@ def _neon_url() -> str:
     return url
 
 
+def _safe_url(url: str) -> str:
+    """Strip unsupported params (channel_binding) from Neon URL."""
+    try:
+        from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+        parsed = urlparse(url)
+        params = parse_qs(parsed.query, keep_blank_values=True)
+        params.pop('channel_binding', None)
+        new_query = urlencode({k: v[0] for k, v in params.items()})
+        return urlunparse(parsed._replace(query=new_query))
+    except Exception:
+        return url
+
+
 def is_neon() -> bool:
     return bool(_neon_url())
 
@@ -41,7 +54,11 @@ def get_engine():
     from sqlalchemy import create_engine
     url = _neon_url()
     if url:
-        return create_engine(url, pool_pre_ping=True)
+        safe = _safe_url(url)
+        # SQLAlchemy requires postgresql+psycopg2:// driver prefix
+        if safe.startswith('postgresql://'):
+            safe = safe.replace('postgresql://', 'postgresql+psycopg2://', 1)
+        return create_engine(safe, pool_pre_ping=True)
     return create_engine(f"sqlite:///{SQLITE_PATH}")
 
 
@@ -140,6 +157,6 @@ def get_conn(path: str = SQLITE_PATH):
     url = _neon_url()
     if url:
         import psycopg2
-        return _PgWrapper(psycopg2.connect(url))
+        return _PgWrapper(psycopg2.connect(_safe_url(url)))
     import sqlite3
     return sqlite3.connect(path)
