@@ -1335,46 +1335,63 @@ with tab_explain:
                     _interv_icon  = "—"
                     _interv_color = "#6b7280"
 
-                st.markdown(f"""
-<div style='background:#ffffff;border:1px solid #e5e7eb;border-radius:16px;padding:24px;'>
-  <div style='font-size:16px;font-weight:800;color:#1e293b;margin-bottom:16px;'>
-    {_r.get('order_id','')} &nbsp;·&nbsp;
-    <span style='font-size:13px;font-weight:600;color:#6b7280;'>
-      ${_val:,.0f} &nbsp;·&nbsp; {_margin*100:.0f}% margin
-    </span>
-  </div>
+                # Pre-compute color (avoids nested f-string — invalid Python < 3.12)
+                _np_color = '#059669' if _net_profit_v >= 0 else '#e11d48'
 
-  <div style='display:grid;grid-template-columns:1fr 1fr;gap:12px;'>
+                # Order header
+                st.markdown(
+                    f"<div style='font-size:15px;font-weight:800;color:#1e293b;"
+                    f"padding:8px 0 12px;border-bottom:1px solid #e5e7eb;margin-bottom:12px;'>"
+                    f"{_r.get('order_id','')} &nbsp;·&nbsp;"
+                    f"<span style='font-size:13px;font-weight:600;color:#6b7280;'>"
+                    f"${_val:,.0f} &nbsp;·&nbsp; {_margin*100:.0f}% margin</span></div>",
+                    unsafe_allow_html=True)
 
-    <div style='background:#fff1f2;border:1px solid #fecdd3;border-radius:12px;padding:16px;'>
-      <div style='font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#e11d48;margin-bottom:8px;'>AI Decision</div>
-      <div style='font-size:18px;font-weight:800;color:#e11d48;'>{_ai_dec_icon} {_ai_dec_text}</div>
-      <div style='font-size:12px;color:#374151;margin-top:6px;'><b>Reason:</b> {_reason}</div>
-    </div>
+                # 2×2 card grid using st.columns (avoids CSS grid stripping)
+                _cx1, _cx2 = st.columns(2)
 
-    <div style='background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:16px;'>
-      <div style='font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#059669;margin-bottom:8px;'>Navedas Discovery</div>
-      <div style='font-size:14px;font-weight:700;color:{_disc_color};'>{_disc_icon} {_discovery}</div>
-    </div>
+                with _cx1:
+                    st.markdown(
+                        f"<div style='background:#fff1f2;border:1px solid #fecdd3;"
+                        f"border-radius:12px;padding:16px;margin-bottom:10px;'>"
+                        f"<div style='font-size:10px;font-weight:700;text-transform:uppercase;"
+                        f"letter-spacing:.1em;color:#e11d48;margin-bottom:8px;'>AI Decision</div>"
+                        f"<div style='font-size:18px;font-weight:800;color:#e11d48;'>"
+                        f"{_ai_dec_icon} {_ai_dec_text}</div>"
+                        f"<div style='font-size:12px;color:#374151;margin-top:6px;'>"
+                        f"<b>Reason:</b> {_reason}</div></div>",
+                        unsafe_allow_html=True)
+                    st.markdown(
+                        f"<div style='background:#f8f7ff;border:1px solid #ddd6fe;"
+                        f"border-radius:12px;padding:16px;'>"
+                        f"<div style='font-size:10px;font-weight:700;text-transform:uppercase;"
+                        f"letter-spacing:.1em;color:#6C63FF;margin-bottom:8px;'>Intervention</div>"
+                        f"<div style='font-size:14px;font-weight:700;color:{_interv_color};'>"
+                        f"{_interv_icon} {_interv_text}</div>"
+                        f"<div style='font-size:12px;color:#374151;margin-top:6px;'>"
+                        f"<b>Tier:</b> {_tier} &nbsp;·&nbsp; <b>Cost:</b> ${_int_cost_v:,.0f}</div></div>",
+                        unsafe_allow_html=True)
 
-    <div style='background:#f8f7ff;border:1px solid #ddd6fe;border-radius:12px;padding:16px;'>
-      <div style='font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#6C63FF;margin-bottom:8px;'>Intervention</div>
-      <div style='font-size:14px;font-weight:700;color:{_interv_color};'>{_interv_icon} {_interv_text}</div>
-      <div style='font-size:12px;color:#374151;margin-top:6px;'><b>Tier:</b> {_tier} &nbsp;·&nbsp; <b>Cost:</b> ${_int_cost_v:,.0f}</div>
-    </div>
-
-    <div style='background:#E6F7EE;border:1px solid #bbf7d0;border-radius:12px;padding:16px;'>
-      <div style='font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#059669;margin-bottom:8px;'>Financial Outcome</div>
-      <div style='font-size:13px;color:#374151;line-height:1.9;'>
-        Revenue Prevented: <b style='color:#059669;'>{fmt_money(_rev_prev)}</b><br>
-        Margin Saved: <b style='color:#059669;'>{fmt_money(_margin_saved_v)}</b><br>
-        Net Profit Impact: <b style='color:{"#059669" if _net_profit_v >= 0 else "#e11d48"};'>{fmt_money(_net_profit_v)}</b>
-      </div>
-    </div>
-
-  </div>
-</div>
-""", unsafe_allow_html=True)
+                with _cx2:
+                    st.markdown(
+                        f"<div style='background:#f0fdf4;border:1px solid #bbf7d0;"
+                        f"border-radius:12px;padding:16px;margin-bottom:10px;'>"
+                        f"<div style='font-size:10px;font-weight:700;text-transform:uppercase;"
+                        f"letter-spacing:.1em;color:#059669;margin-bottom:8px;'>Navedas Discovery</div>"
+                        f"<div style='font-size:14px;font-weight:700;color:{_disc_color};'>"
+                        f"{_disc_icon} {_discovery}</div></div>",
+                        unsafe_allow_html=True)
+                    st.markdown(
+                        f"<div style='background:#E6F7EE;border:1px solid #bbf7d0;"
+                        f"border-radius:12px;padding:16px;'>"
+                        f"<div style='font-size:10px;font-weight:700;text-transform:uppercase;"
+                        f"letter-spacing:.1em;color:#059669;margin-bottom:8px;'>Financial Outcome</div>"
+                        f"<div style='font-size:13px;color:#374151;line-height:1.9;'>"
+                        f"Revenue Prevented: <b style='color:#059669;'>{fmt_money(_rev_prev)}</b><br>"
+                        f"Margin Saved: <b style='color:#059669;'>{fmt_money(_margin_saved_v)}</b><br>"
+                        f"Net Profit Impact: <b style='color:{_np_color};'>{fmt_money(_net_profit_v)}</b>"
+                        f"</div></div>",
+                        unsafe_allow_html=True)
 
     st.markdown("---")
     st.markdown(sh("Bulk Explainability — Cancellation Reason Analysis"), unsafe_allow_html=True)
@@ -1389,31 +1406,33 @@ with tab_explain:
     _by_reason_ex['recovery_rate'] = (_by_reason_ex['recovered'] /
                                        _by_reason_ex['recoverable'].clip(lower=1) * 100).round(1)
 
-    _ex_html = (
-        "<div style='display:grid;grid-template-columns:repeat(2,1fr);gap:12px;'>"
-    )
     _reason_colors = {
         'Payment Expired':            ('#fffbeb', '#fde68a', '#d97706'),
         'Vendor Split Possible':      ('#f0fdf4', '#bbf7d0', '#059669'),
         'Stock Sync Delay':           ('#fff1f2', '#fecdd3', '#e11d48'),
         'AI Logic Gap - SKU Mapping': ('#f8f7ff', '#ddd6fe', '#6C63FF'),
     }
-    for _, row in _by_reason_ex.iterrows():
-        _bg, _brd, _clr = _reason_colors.get(row['cancellation_reason'], ('#f9fafb', '#e5e7eb', '#6b7280'))
-        _ex_html += (
-            f"<div style='background:{_bg};border:1px solid {_brd};border-radius:12px;padding:16px;'>"
-            f"<div style='font-size:12px;font-weight:800;color:{_clr};margin-bottom:8px;'>{row['cancellation_reason']}</div>"
-            f"<div style='font-size:12px;color:#374151;line-height:1.9;'>"
-            f"Orders: <b>{row['orders']:,}</b><br>"
-            f"Recoverable: <b>{int(row['recoverable']):,}</b><br>"
-            f"Recovered: <b>{int(row['recovered']):,}</b><br>"
-            f"Recovery Rate: <b style='color:{_clr};'>{row['recovery_rate']:.0f}%</b><br>"
-            f"Revenue at Risk: <b>{fmt_money(row['rev_at_risk'])}</b><br>"
-            f"Revenue Saved: <b style='color:#059669;'>{fmt_money(row['rev_saved'])}</b>"
-            f"</div></div>"
-        )
-    _ex_html += "</div>"
-    st.markdown(_ex_html, unsafe_allow_html=True)
+    # Use st.columns to avoid CSS grid stripping
+    _bulk_rows = list(_by_reason_ex.iterrows())
+    for _bi in range(0, len(_bulk_rows), 2):
+        _bcols = st.columns(2)
+        for _bj, (_, row) in enumerate(_bulk_rows[_bi:_bi+2]):
+            _bg, _brd, _clr = _reason_colors.get(row['cancellation_reason'], ('#f9fafb', '#e5e7eb', '#6b7280'))
+            with _bcols[_bj]:
+                st.markdown(
+                    f"<div style='background:{_bg};border:1px solid {_brd};"
+                    f"border-radius:12px;padding:16px;margin-bottom:10px;'>"
+                    f"<div style='font-size:12px;font-weight:800;color:{_clr};margin-bottom:8px;'>"
+                    f"{row['cancellation_reason']}</div>"
+                    f"<div style='font-size:12px;color:#374151;line-height:1.9;'>"
+                    f"Orders: <b>{row['orders']:,}</b><br>"
+                    f"Recoverable: <b>{int(row['recoverable']):,}</b><br>"
+                    f"Recovered: <b>{int(row['recovered']):,}</b><br>"
+                    f"Recovery Rate: <b style='color:{_clr};'>{row['recovery_rate']:.0f}%</b><br>"
+                    f"Revenue at Risk: <b>{fmt_money(row['rev_at_risk'])}</b><br>"
+                    f"Revenue Saved: <b style='color:#059669;'>{fmt_money(row['rev_saved'])}</b>"
+                    f"</div></div>",
+                    unsafe_allow_html=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
