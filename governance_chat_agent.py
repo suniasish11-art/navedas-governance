@@ -3,11 +3,18 @@ governance_chat_agent.py — Navedas NLP Governance Chat Assistant
 Keyword-based NLP interpreter that converts natural language questions
 into database queries and returns formatted governance insights.
 
+v2.1 — Added diagnostics engine:
+  - Root-cause cancellation analysis
+  - Order-level investigation
+  - Live signal querying
+  - Revenue loss diagnosis
+
 Usage:
     from governance_chat_agent import ask
-    response = ask("How much revenue was saved?")
+    response = ask("Why did cancellations increase today?")
 """
 import os
+import re
 from db import get_conn, SQLITE_PATH
 
 _DB_FILE = SQLITE_PATH
@@ -73,6 +80,26 @@ INTENT_PATTERNS = {
     'help': [
         'help', 'what can you do', 'what can i ask', 'commands',
         'examples', 'how to use', 'capabilities', 'questions',
+    ],
+    # ── Diagnostic intents (v2.1) ──────────────────────────────────────────
+    'diagnose_cancellations': [
+        'why did cancellations increase', 'why are cancellations high',
+        'cancellation spike', 'what caused cancellations', 'investigate cancellations',
+        'cancellation root cause', 'why so many cancellations', 'cancel analysis',
+    ],
+    'investigate_order': [
+        'investigate order', 'explain order', 'what happened to order',
+        'order details', 'look up order', 'find order', 'show order',
+    ],
+    'governance_signals': [
+        'any signals', 'governance signals', 'active signals', 'signal status',
+        'what signals', 'are there any signals', 'system alerts', 'alerts',
+        'anomalies', 'signal report',
+    ],
+    'revenue_loss_diagnosis': [
+        'what caused revenue loss', 'why revenue loss', 'revenue loss today',
+        'revenue leak', 'where is revenue being lost', 'loss analysis',
+        'diagnose revenue', 'revenue problem',
     ],
 }
 
@@ -407,6 +434,176 @@ def _summary(db):
     )
 
 
+def _diagnose_cancellations(db):
+    """Root-cause analysis of AI cancellations."""
+    # Overall stats
+    r = _one(db, "SELECT COUNT(*), SUM(ai_cancel_flag), SUM(recoverable_flag) FROM orders")
+    total  = int(float((r or (0, 0, 0))[0] or 0))
+    canc   = int(float((r or (0, 0, 0))[1] or 0))
+    recov  = int(float((r or (0, 0, 0))[2] or 0))
+    rate   = canc / total * 100 if total > 0 else 0
+    baseline = 35.0
+
+    # Breakdown by reason
+    rows = _many(db,
+        "SELECT cancellation_reason, COUNT(*) as cnt, "
+        "SUM(revenue_lost_before_ai_only) as rev_loss "
+        "FROM orders WHERE ai_cancel_flag=1 "
+        "GROUP BY cancellation_reason ORDER BY cnt DESC")
+
+    lines = [
+        f"**Cancellation Diagnostic Report**\n",
+        f"| Metric | Value |",
+        f"|---|---|",
+        f"| Total AI Cancellations | **{canc:,}** ({rate:.1f}% of all orders) |",
+        f"| Baseline Expected | **{baseline:.0f}%** |",
+        f"| Deviation | **{(rate - baseline):+.1f}pp** {'⚠️ Above baseline' if rate > baseline else '✅ Within baseline'} |",
+        f"| Recoverable | **{recov:,}** ({recov/canc*100:.0f}% of cancelled) |",
+        f"\n**Primary Cancellation Reasons:**\n",
+        f"| Reason | Orders | Revenue at Risk |",
+        f"|---|---|---|",
+    ]
+    for reason, cnt, rev in rows:
+        pct = cnt / canc * 100 if canc > 0 else 0
+        lines.append(f"| {reason} | **{cnt:,}** ({pct:.0f}%) | **{_fmt(float(rev or 0))}** |")
+
+    lines.append(f"\n**Diagnosis:** {'Cancellation rate is elevated above baseline. ' if rate > baseline else 'Cancellations within normal range. '}"
+                 f"Top driver is {rows[0][0] if rows else 'Unknown'}. "
+                 f"Navedas governance has {recov:,} recoverable orders to process.")
+    return "\n".join(lines)
+
+
+def _investigate_order(db, question: str):
+    """Look up a specific order and explain the AI + governance decisions."""
+    # Extract order ID from question
+    match = re.search(r'(ORD-\d+|#\d+|FEED-\d+)', question.upper())
+    if not match:
+        return (
+            "Please include an order ID in your question. Example:\n\n"
+            "*Investigate order ORD-800042*"
+        )
+    oid = match.group(1)
+
+    # Try orders table first
+    r = _one(db,
+        "SELECT order_id, total_order_value, margin_percent, ai_cancel_flag, "
+        "cancellation_reason, recoverable_flag, intervention_attempted_by_navedas, "
+        "intervention_success, recovery_rate_flag, "
+        "revenue_prevented_by_navedas, margin_saved_after_navedas, "
+        "net_profit_impact_due_to_navedas, intervention_failure_reason, "
+        "governance_tier, demand_level, customer_state "
+        "FROM orders WHERE order_id=?", (oid,))
+
+    if not r or not r[0]:
+        return f"Order **{oid}** not found in the historical dataset. Try a different order ID (e.g. ORD-800001 to ORD-804999)."
+
+    (order_id, val, margin, ai_cancel, cancel_reason, recoverable,
+     attempted, success, recovered, rev_prev, margin_saved, net_profit,
+     fail_reason, tier, demand, state) = r
+
+    # AI Decision section
+    ai_decision = "Cancelled order" if ai_cancel else "Fulfilled normally"
+    ai_reason   = cancel_reason if ai_cancel else "Order within normal parameters"
+
+    # Navedas discovery
+    if ai_cancel and recoverable:
+        discovery = f"Order is recoverable — {cancel_reason} can be resolved via {tier or 'Auto'} intervention"
+    elif ai_cancel and not recoverable:
+        discovery = "Order is not recoverable — cancellation is valid"
+    else:
+        discovery = "No AI cancellation — order fulfilled normally"
+
+    # Intervention
+    if attempted:
+        interv_result = "✅ SUCCESS — Revenue saved" if success else f"❌ FAILED — {fail_reason or 'Unknown reason'}"
+    elif ai_cancel and recoverable:
+        interv_result = "⏳ Pending — Awaiting agent intervention"
+    else:
+        interv_result = "N/A — No intervention needed"
+
+    # Financial outcome
+    val_f   = float(val or 0)
+    margin_f = float(margin or 0)
+    rev_f   = float(rev_prev or 0)
+    ms_f    = float(margin_saved or 0)
+    np_f    = float(net_profit or 0)
+
+    return (
+        f"**Order Investigation: {order_id}**\n\n"
+        f"| Field | Detail |\n|---|---|\n"
+        f"| Order Value | **{_fmt(val_f)}** |\n"
+        f"| Margin % | **{margin_f*100:.1f}%** |\n"
+        f"| State | **{state}** | Demand: **{demand}** |\n\n"
+        f"---\n\n"
+        f"**AI Decision:** {ai_decision}  \n"
+        f"**AI Reason:** {ai_reason}  \n\n"
+        f"**Navedas Discovery:** {discovery}  \n"
+        f"**Intervention Result:** {interv_result}  \n\n"
+        f"**Financial Outcome:**  \n"
+        f"- Revenue Prevented: **{_fmt(rev_f)}**  \n"
+        f"- Margin Saved: **{_fmt(ms_f)}**  \n"
+        f"- Net Profit Impact: **{_fmt(np_f)}**"
+    )
+
+
+def _governance_signals(db):
+    """Query the signal engine and return active signals."""
+    try:
+        from signal_engine import get_signal_summary
+        return get_signal_summary(db)
+    except Exception as e:
+        return f"Signal engine unavailable: {e}"
+
+
+def _revenue_loss_diagnosis(db):
+    """Diagnose where revenue is being lost in the governance pipeline."""
+    r = _one(db,
+        "SELECT SUM(revenue_lost_before_ai_only), "
+        "SUM(revenue_prevented_by_navedas), "
+        "SUM(avoidable_revenue_loss_after_navedas), "
+        "SUM(ai_cancel_flag), COUNT(*) FROM orders")
+    ai_loss  = float((r or (0,)*5)[0] or 0)
+    prev     = float((r or (0,)*5)[1] or 0)
+    residual = float((r or (0,)*5)[2] or 0)
+    canc     = int(float((r or (0,)*5)[3] or 0))
+    total    = int(float((r or (0,)*5)[4] or 0))
+
+    # Breakdown by failure reason
+    rows = _many(db,
+        "SELECT intervention_failure_reason, COUNT(*) as cnt, "
+        "SUM(avoidable_revenue_loss_after_navedas) as loss "
+        "FROM orders "
+        "WHERE intervention_failure_reason NOT IN ('None','Not Recoverable') "
+        "AND intervention_failure_reason IS NOT NULL "
+        "GROUP BY intervention_failure_reason ORDER BY loss DESC LIMIT 5")
+
+    recovery_rate = prev / ai_loss * 100 if ai_loss > 0 else 0
+
+    lines = [
+        f"**Revenue Loss Diagnosis**\n",
+        f"| Stage | Amount |",
+        f"|---|---|",
+        f"| Revenue at risk (AI cancellations) | **{_fmt(ai_loss)}** |",
+        f"| Recovered by Navedas governance | **{_fmt(prev)}** ({recovery_rate:.0f}%) |",
+        f"| **Residual loss remaining** | **{_fmt(residual)}** |",
+        f"\n**Root Causes of Remaining Loss:**\n",
+        f"| Failure Reason | Orders | Revenue Lost |",
+        f"|---|---|---|",
+    ]
+    for reason, cnt, loss in rows:
+        lines.append(f"| {reason} | {cnt:,} | **{_fmt(float(loss or 0))}** |")
+
+    if not rows:
+        lines.append("| No intervention failures recorded | — | — |")
+
+    lines.append(
+        f"\n**Diagnosis:** ${residual/1e6:.2f}M in residual loss after governance. "
+        f"Navedas recovered {recovery_rate:.0f}% of at-risk revenue. "
+        f"Primary loss drivers are listed above."
+    )
+    return "\n".join(lines)
+
+
 def _help():
     return (
         "**Navedas Governance Chat Assistant**\n\n"
@@ -425,25 +622,35 @@ def _help():
         "| *How much margin was saved?* | Margin figures |\n"
         "| *How many total orders?* | All table counts |\n"
         "| *Show recent interventions* | Event timeline |\n"
-        "| *Give me a summary* | Full dashboard overview |"
+        "| *Give me a summary* | Full dashboard overview |\n\n"
+        "**Diagnostics (v2.1):**\n\n"
+        "| Question | What I'll show |\n|---|---|\n"
+        "| *Why did cancellations increase?* | Root-cause cancellation analysis |\n"
+        "| *Investigate order ORD-800042* | AI decision + Navedas outcome drill-down |\n"
+        "| *Any governance signals right now?* | Active signal report |\n"
+        "| *What caused revenue loss today?* | Revenue loss diagnosis |"
     )
 
 
 _HANDLERS = {
-    'revenue_prevented': _revenue_prevented,
-    'roi':               _roi,
-    'recoveries':        _recoveries,
-    'recovery_rate':     _recovery_rate,
-    'cancellation_rate': _cancellation_rate,
-    'health_score':      _health_score,
-    'net_profit':        _net_profit,
-    'intervention_cost': _intervention_cost,
-    'agent_stats':       _agent_stats,
-    'top_failures':      _top_failures,
-    'margin_saved':      _margin_saved,
-    'total_orders':      _total_orders,
-    'recent_events':     _recent_events,
-    'summary':           _summary,
+    'revenue_prevented':      _revenue_prevented,
+    'roi':                    _roi,
+    'recoveries':             _recoveries,
+    'recovery_rate':          _recovery_rate,
+    'cancellation_rate':      _cancellation_rate,
+    'health_score':           _health_score,
+    'net_profit':             _net_profit,
+    'intervention_cost':      _intervention_cost,
+    'agent_stats':            _agent_stats,
+    'top_failures':           _top_failures,
+    'margin_saved':           _margin_saved,
+    'total_orders':           _total_orders,
+    'recent_events':          _recent_events,
+    'summary':                _summary,
+    # Diagnostic handlers (v2.1)
+    'diagnose_cancellations': _diagnose_cancellations,
+    'revenue_loss_diagnosis': _revenue_loss_diagnosis,
+    'governance_signals':     _governance_signals,
 }
 
 
@@ -461,12 +668,21 @@ def ask(question: str, db_path: str = _DB_FILE) -> str:
     if intent == 'help':
         return _help()
 
+    # investigate_order needs the raw question to extract order ID
+    if intent == 'investigate_order':
+        try:
+            return _investigate_order(db_path, question)
+        except Exception as e:
+            return f"Error investigating order: {e}"
+
     if intent == 'unknown':
         return (
             "I'm not sure what you're asking. Try questions like:\n\n"
             "- *How much revenue was saved?*\n"
             "- *What is the ROI?*\n"
-            "- *What is the health score?*\n\n"
+            "- *Any governance signals right now?*\n"
+            "- *Why did cancellations increase?*\n"
+            "- *Investigate order ORD-800001*\n\n"
             "Type **help** to see all supported questions."
         )
 

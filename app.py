@@ -50,6 +50,26 @@ except Exception:
     def chat_ask(question, db_path=None):
         return "Chat assistant unavailable. Please check governance_chat_agent.py."
 
+try:
+    from signal_engine import detect_signals, get_signal_summary, compute_ghs_trend
+except Exception:
+    def detect_signals(db_path=None):
+        return [{'signal_type': 'System Nominal', 'severity_level': 'INFO',
+                 'detected_timestamp': '', 'impact_estimate_usd': 0,
+                 'primary_root_cause': 'Signal engine unavailable.',
+                 'icon': '🟢', 'color': '#059669', 'bg': '#f0fdf4', 'border': '#bbf7d0'}]
+    def get_signal_summary(db_path=None): return "Signal engine unavailable."
+    def compute_ghs_trend(df): return []
+
+try:
+    from event_logger import (log_event, get_event_timeline,
+                               ensure_event_schema, log_agent_cycle_events)
+except Exception:
+    def log_event(db_path, *a, **kw): pass
+    def get_event_timeline(db_path=None, limit=40): return []
+    def ensure_event_schema(conn): pass
+    def log_agent_cycle_events(db_path, results): pass
+
 # ── Page config ────────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Navedas Governance Intelligence Platform",
@@ -279,9 +299,12 @@ if st.session_state.auto_agent:
         try:
             _conn = get_conn(_DB_FILE)
             ensure_schema(_conn)
+            ensure_event_schema(_conn)
             st.session_state.feed_counter += 1
             _batch = [generate_order(st.session_state.feed_counter * 100 + _i) for _i in range(5)]
             insert_orders_batch(_conn, _batch)
+            log_event(_DB_FILE, 'FEED_UPDATE', '—',
+                      f'Auto-agent: 5 orders added to feed (cycle {st.session_state.auto_agent_stats["cycles"]+1})')
             _conn.close()
             _summary = run_agent_cycle(_DB_FILE)
             _stats = st.session_state.auto_agent_stats
@@ -558,9 +581,10 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ── TABS ───────────────────────────────────────────────────────────────────────
-tab_overview, tab_governance, tab_agents, tab_live, tab_risk, tab_agent_intel, tab_arch, tab_chat = st.tabs([
+tab_overview, tab_governance, tab_agents, tab_live, tab_risk, tab_signals, tab_explain, tab_agent_intel, tab_arch, tab_chat = st.tabs([
     "📊 Overview", "🏛️ Governance", "👥 Agents", "📡 Live Feed",
-    "⚠️ Risk", "🤖 Agent Intel", "🏗️ Architecture", "💬 Chat"
+    "⚠️ Risk", "📡 Signals", "🔍 Explainability",
+    "🤖 Agent Intel", "🏗️ Architecture", "💬 Chat"
 ])
 
 
@@ -703,6 +727,47 @@ with tab_overview:
             kc("SLA Compliance",    f"{kpis['sla_compliance']*100:.1f}%", f"Split: {kpis['split_rate']*100:.1f}%", "#E6F7EE","#059669","#bbf7d0","✅"),
         ),
         unsafe_allow_html=True)
+
+    # Governance Health Score Trend (Feature 6)
+    st.markdown('<div class="section-header">Governance Health Score — Monthly Trend</div>',
+                unsafe_allow_html=True)
+    _ghs_trend = compute_ghs_trend(df)
+    if _ghs_trend:
+        _months = [t['month'] for t in _ghs_trend]
+        _scores = [t['score'] for t in _ghs_trend]
+        _colors_trend = []
+        for t in _ghs_trend:
+            _colors_trend.append(
+                '#059669' if t['band'] == 'Excellent' else
+                '#2563eb' if t['band'] == 'Healthy' else
+                '#d97706' if t['band'] == 'Warning' else '#e11d48'
+            )
+        _baseline_val = 75
+        fig_ghs_trend = go.Figure()
+        fig_ghs_trend.add_shape(type='line', x0=_months[0], x1=_months[-1],
+                                y0=_baseline_val, y1=_baseline_val,
+                                line=dict(color='#d97706', width=2, dash='dot'))
+        fig_ghs_trend.add_annotation(x=_months[-1], y=_baseline_val + 2,
+                                     text='Healthy threshold (75)', showarrow=False,
+                                     font=dict(color='#d97706', size=11))
+        fig_ghs_trend.add_trace(go.Scatter(
+            x=_months, y=_scores, mode='lines+markers+text',
+            line=dict(color='#6C63FF', width=3),
+            marker=dict(color=_colors_trend, size=12, line=dict(color='white', width=2)),
+            text=[f"{s}" for s in _scores],
+            textposition='top center',
+            textfont=dict(color='#374151', size=11),
+            name='GHS Score'
+        ))
+        fig_ghs_trend.update_layout(
+            **BASE_LAYOUT, height=260,
+            margin=dict(l=50, r=30, t=30, b=40),
+            yaxis=dict(range=[50, 105], gridcolor='#e2e8f0', showgrid=True,
+                       color='#64748b', title='GHS Score'),
+            xaxis=dict(gridcolor='#e2e8f0', showgrid=False, color='#64748b'),
+            showlegend=False,
+        )
+        st.plotly_chart(fig_ghs_trend, use_container_width=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1086,7 +1151,273 @@ with tab_risk:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 6 — AGENT INTEL (NEW)
+# TAB 6 — SIGNALS (AI GOVERNANCE INTELLIGENCE)
+# ══════════════════════════════════════════════════════════════════════════════
+with tab_signals:
+    st.markdown(sh("AI Governance Intelligence — Active Signals"), unsafe_allow_html=True)
+
+    _signals = detect_signals(_DB_FILE)
+
+    # Signal severity summary bar
+    _crit = sum(1 for s in _signals if s['severity_level'] == 'CRITICAL')
+    _warn = sum(1 for s in _signals if s['severity_level'] == 'WARNING')
+    _info = sum(1 for s in _signals if s['severity_level'] == 'INFO')
+    st.markdown(
+        kr(
+            kc("Critical Signals",  str(_crit), "Immediate action required",     "#fff1f2","#e11d48","#fecdd3","🔴"),
+            kc("Warning Signals",   str(_warn), "Monitor and investigate",        "#fffbeb","#d97706","#fde68a","🟡"),
+            kc("Info / Nominal",    str(_info), "Within normal parameters",       "#f0fdf4","#059669","#bbf7d0","🟢"),
+            kc("Total Signals",     str(len(_signals)), "Active detections",      "#F1F0FF","#6C63FF","#ddd6fe","📡"),
+        ),
+        unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # Signal cards
+    for sig in _signals:
+        impact_str = f"${sig['impact_estimate_usd']:,.0f}" if sig['impact_estimate_usd'] > 0 else "N/A"
+        st.markdown(f"""
+<div style='background:{sig["bg"]};border:2px solid {sig["border"]};border-radius:14px;
+     padding:20px 24px;margin-bottom:12px;'>
+  <div style='display:flex;align-items:center;gap:12px;margin-bottom:10px;'>
+    <span style='font-size:20px;'>{sig["icon"]}</span>
+    <div style='flex:1;'>
+      <div style='font-size:14px;font-weight:800;color:{sig["color"]};'>{sig["signal_type"]}</div>
+      <div style='font-size:11px;color:#6b7280;margin-top:2px;'>
+        Severity: <b style='color:{sig["color"]};'>{sig["severity_level"]}</b>
+        &nbsp;·&nbsp; Detected: {sig["detected_timestamp"]}
+        &nbsp;·&nbsp; Impact: <b>${sig["impact_estimate_usd"]:,.0f}</b>
+      </div>
+    </div>
+    <div style='background:{sig["color"]};color:white;border-radius:20px;
+         padding:4px 14px;font-size:11px;font-weight:700;'>{sig["severity_level"]}</div>
+  </div>
+  <div style='font-size:13px;color:#374151;padding-left:32px;'>
+    <b>Root Cause:</b> {sig["primary_root_cause"]}
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # Agent Activity Monitor
+    st.markdown(sh("Agent Activity Monitor"), unsafe_allow_html=True)
+    _agent_act = get_agent_summary(_DB_FILE)
+    _pending_now = get_feed_pending_count(_DB_FILE)
+    st.markdown(
+        kr(
+            kc("Orders Analyzed",       f"{_agent_act['total']:,}",           "by governance agent",       "#F1F0FF","#6C63FF","#ddd6fe","🔬"),
+            kc("Logic Gaps Processed",  f"{_agent_act['total']:,}",           "AI-flagged orders reviewed","#fffbeb","#d97706","#fde68a","⚠️"),
+            kc("Recoveries Attempted",  f"{_agent_act['total']:,}",           "interventions triggered",   "#F1F0FF","#6C63FF","#ddd6fe","⚡"),
+            kc("Recoveries Successful", f"{_agent_act['recovered']:,}",       f"{_agent_act['recovered']/_agent_act['total']*100:.0f}% success rate" if _agent_act['total'] > 0 else "—", "#E6F7EE","#059669","#bbf7d0","✅"),
+            kc("Pending in Feed",       f"{_pending_now:,}",                  "awaiting processing",       "#fff1f2","#e11d48","#fecdd3","📥"),
+        ),
+        unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # Governance Event Timeline
+    st.markdown(sh("Governance Event Timeline"), unsafe_allow_html=True)
+    _timeline = get_event_timeline(_DB_FILE, limit=30)
+
+    if not _timeline:
+        st.info("No events logged yet. Feed orders and run the agent to populate the timeline.")
+    else:
+        _tl_html = "<div style='display:flex;flex-direction:column;gap:6px;'>"
+        for ev in _timeline:
+            _imp_str = f" · ${ev['impact_value']:,.0f}" if ev['impact_value'] > 0 else ""
+            _tl_html += (
+                f"<div style='display:flex;gap:12px;align-items:flex-start;"
+                f"padding:10px 14px;border-radius:10px;background:#f8f7ff;"
+                f"border:1px solid #e8e6ff;'>"
+                f"<span style='font-size:16px;flex-shrink:0;'>{ev['icon']}</span>"
+                f"<div style='flex:1;min-width:0;'>"
+                f"<div style='font-size:12px;font-weight:700;color:{ev['color']};'>"
+                f"{ev['event_type'].replace('_',' ')}</div>"
+                f"<div style='font-size:12px;color:#374151;margin-top:2px;'>{ev['description']}{_imp_str}</div>"
+                f"<div style='font-size:11px;color:#9ca3af;margin-top:2px;'>"
+                f"Order: {ev['order_id']} · {ev['timestamp']}</div>"
+                f"</div></div>"
+            )
+        _tl_html += "</div>"
+        st.markdown(_tl_html, unsafe_allow_html=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 7 — EXPLAINABILITY (AI DECISION INTELLIGENCE)
+# ══════════════════════════════════════════════════════════════════════════════
+with tab_explain:
+    st.markdown(sh("AI Decision Intelligence — Order-Level Explainability"), unsafe_allow_html=True)
+    st.markdown(
+        "<div style='font-size:13px;color:#64748b;margin-bottom:16px;'>"
+        "Select any AI-cancelled order to see <b>why the AI cancelled it</b>, "
+        "what <b>Navedas discovered</b>, and the <b>financial outcome</b>.</div>",
+        unsafe_allow_html=True)
+
+    # Order selector — pick from AI-cancelled orders
+    _ex_orders = df[df['ai_cancel_flag'] == 1][['order_id','total_order_value',
+                                                 'cancellation_reason','recovery_rate_flag']].head(200)
+    _order_labels = [
+        f"{row['order_id']}  |  ${row['total_order_value']:,.0f}  |  {row['cancellation_reason']}"
+        for _, row in _ex_orders.iterrows()
+    ]
+    _col_sel, _col_detail = st.columns([1, 2])
+
+    with _col_sel:
+        st.markdown(sh("Select Order"), unsafe_allow_html=True)
+        if _order_labels:
+            _sel_label = st.selectbox("AI-Cancelled Orders", _order_labels, label_visibility="collapsed")
+            _sel_oid   = _sel_label.split('|')[0].strip()
+        else:
+            _sel_oid = None
+            st.info("No AI-cancelled orders found.")
+
+        # Quick search by ID
+        _manual_id = st.text_input("Or type Order ID", placeholder="ORD-800001")
+        if _manual_id.strip():
+            _sel_oid = _manual_id.strip().upper()
+
+    with _col_detail:
+        if _sel_oid:
+            _ex_row = df[df['order_id'] == _sel_oid]
+            if len(_ex_row) == 0:
+                st.warning(f"Order {_sel_oid} not found.")
+            else:
+                _r = _ex_row.iloc[0]
+                _ai_cancel    = bool(_r.get('ai_cancel_flag', 0))
+                _recoverable  = bool(_r.get('recoverable_flag', 0))
+                _success      = bool(_r.get('recovery_rate_flag', 0))
+                _attempted    = bool(_r.get('intervention_attempted_by_navedas', 0))
+                _val          = float(_r.get('total_order_value', 0))
+                _margin       = float(_r.get('margin_percent', 0))
+                _reason       = str(_r.get('cancellation_reason', 'Unknown'))
+                _fail_reason  = str(_r.get('intervention_failure_reason', 'None'))
+                _tier         = str(_r.get('governance_tier', 'None'))
+                _rev_prev     = float(_r.get('revenue_prevented_by_navedas', 0))
+                _margin_saved_v = float(_r.get('margin_saved_after_navedas', 0))
+                _net_profit_v = float(_r.get('net_profit_impact_due_to_navedas', 0))
+                _int_cost_v   = float(_r.get('intervention_cost', 0))
+
+                # AI Decision
+                _ai_dec_color = '#e11d48' if _ai_cancel else '#059669'
+                _ai_dec_text  = "Cancelled Order" if _ai_cancel else "Fulfilled Normally"
+                _ai_dec_icon  = "❌" if _ai_cancel else "✅"
+
+                # Navedas Discovery
+                if _ai_cancel and _recoverable:
+                    _discovery = f"Hidden context found: order is recoverable via {_tier} intervention"
+                    _disc_icon = "🔍"
+                    _disc_color = "#059669"
+                elif _ai_cancel and not _recoverable:
+                    _discovery = "AI decision validated — order is not recoverable"
+                    _disc_icon = "✅"
+                    _disc_color = "#6b7280"
+                else:
+                    _discovery = "No intervention required — order fulfilled normally"
+                    _disc_icon = "✅"
+                    _disc_color = "#059669"
+
+                # Intervention
+                if _attempted and _success:
+                    _interv_text  = f"Intervention succeeded — revenue saved"
+                    _interv_icon  = "✅"
+                    _interv_color = "#059669"
+                elif _attempted and not _success:
+                    _interv_text  = f"Intervention failed — {_fail_reason}"
+                    _interv_icon  = "❌"
+                    _interv_color = "#e11d48"
+                elif _recoverable and not _attempted:
+                    _interv_text  = "Pending intervention"
+                    _interv_icon  = "⏳"
+                    _interv_color = "#d97706"
+                else:
+                    _interv_text  = "No intervention"
+                    _interv_icon  = "—"
+                    _interv_color = "#6b7280"
+
+                st.markdown(f"""
+<div style='background:#ffffff;border:1px solid #e5e7eb;border-radius:16px;padding:24px;'>
+  <div style='font-size:16px;font-weight:800;color:#1e293b;margin-bottom:16px;'>
+    {_r.get('order_id','')} &nbsp;·&nbsp;
+    <span style='font-size:13px;font-weight:600;color:#6b7280;'>
+      ${_val:,.0f} &nbsp;·&nbsp; {_margin*100:.0f}% margin
+    </span>
+  </div>
+
+  <div style='display:grid;grid-template-columns:1fr 1fr;gap:12px;'>
+
+    <div style='background:#fff1f2;border:1px solid #fecdd3;border-radius:12px;padding:16px;'>
+      <div style='font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#e11d48;margin-bottom:8px;'>AI Decision</div>
+      <div style='font-size:18px;font-weight:800;color:#e11d48;'>{_ai_dec_icon} {_ai_dec_text}</div>
+      <div style='font-size:12px;color:#374151;margin-top:6px;'><b>Reason:</b> {_reason}</div>
+    </div>
+
+    <div style='background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:16px;'>
+      <div style='font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#059669;margin-bottom:8px;'>Navedas Discovery</div>
+      <div style='font-size:14px;font-weight:700;color:{_disc_color};'>{_disc_icon} {_discovery}</div>
+    </div>
+
+    <div style='background:#f8f7ff;border:1px solid #ddd6fe;border-radius:12px;padding:16px;'>
+      <div style='font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#6C63FF;margin-bottom:8px;'>Intervention</div>
+      <div style='font-size:14px;font-weight:700;color:{_interv_color};'>{_interv_icon} {_interv_text}</div>
+      <div style='font-size:12px;color:#374151;margin-top:6px;'><b>Tier:</b> {_tier} &nbsp;·&nbsp; <b>Cost:</b> ${_int_cost_v:,.0f}</div>
+    </div>
+
+    <div style='background:#E6F7EE;border:1px solid #bbf7d0;border-radius:12px;padding:16px;'>
+      <div style='font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#059669;margin-bottom:8px;'>Financial Outcome</div>
+      <div style='font-size:13px;color:#374151;line-height:1.9;'>
+        Revenue Prevented: <b style='color:#059669;'>{fmt_money(_rev_prev)}</b><br>
+        Margin Saved: <b style='color:#059669;'>{fmt_money(_margin_saved_v)}</b><br>
+        Net Profit Impact: <b style='color:{"#059669" if _net_profit_v >= 0 else "#e11d48"};'>{fmt_money(_net_profit_v)}</b>
+      </div>
+    </div>
+
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+    st.markdown("---")
+    st.markdown(sh("Bulk Explainability — Cancellation Reason Analysis"), unsafe_allow_html=True)
+
+    _by_reason_ex = df[df['ai_cancel_flag'] == 1].groupby('cancellation_reason').agg(
+        orders=('order_id', 'count'),
+        recoverable=('recoverable_flag', 'sum'),
+        recovered=('recovery_rate_flag', 'sum'),
+        rev_at_risk=('revenue_lost_before_ai_only', 'sum'),
+        rev_saved=('revenue_prevented_by_navedas', 'sum'),
+    ).reset_index()
+    _by_reason_ex['recovery_rate'] = (_by_reason_ex['recovered'] /
+                                       _by_reason_ex['recoverable'].clip(lower=1) * 100).round(1)
+
+    _ex_html = (
+        "<div style='display:grid;grid-template-columns:repeat(2,1fr);gap:12px;'>"
+    )
+    _reason_colors = {
+        'Payment Expired':            ('#fffbeb', '#fde68a', '#d97706'),
+        'Vendor Split Possible':      ('#f0fdf4', '#bbf7d0', '#059669'),
+        'Stock Sync Delay':           ('#fff1f2', '#fecdd3', '#e11d48'),
+        'AI Logic Gap - SKU Mapping': ('#f8f7ff', '#ddd6fe', '#6C63FF'),
+    }
+    for _, row in _by_reason_ex.iterrows():
+        _bg, _brd, _clr = _reason_colors.get(row['cancellation_reason'], ('#f9fafb', '#e5e7eb', '#6b7280'))
+        _ex_html += (
+            f"<div style='background:{_bg};border:1px solid {_brd};border-radius:12px;padding:16px;'>"
+            f"<div style='font-size:12px;font-weight:800;color:{_clr};margin-bottom:8px;'>{row['cancellation_reason']}</div>"
+            f"<div style='font-size:12px;color:#374151;line-height:1.9;'>"
+            f"Orders: <b>{row['orders']:,}</b><br>"
+            f"Recoverable: <b>{int(row['recoverable']):,}</b><br>"
+            f"Recovered: <b>{int(row['recovered']):,}</b><br>"
+            f"Recovery Rate: <b style='color:{_clr};'>{row['recovery_rate']:.0f}%</b><br>"
+            f"Revenue at Risk: <b>{fmt_money(row['rev_at_risk'])}</b><br>"
+            f"Revenue Saved: <b style='color:#059669;'>{fmt_money(row['rev_saved'])}</b>"
+            f"</div></div>"
+        )
+    _ex_html += "</div>"
+    st.markdown(_ex_html, unsafe_allow_html=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 8 — AGENT INTEL (NOW TAB 8)
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_agent_intel:
     # Agent DB stats
@@ -1309,13 +1640,17 @@ with tab_chat:
         st.session_state.chat_history.append({
             "role": "assistant",
             "content": (
-                "👋 **Welcome to the Navedas Governance Chat Assistant!**\n\n"
-                "I can answer questions about your governance platform metrics.\n\n"
-                "Try asking:\n"
+                "👋 **Welcome to the Navedas Governance Chat Assistant v2.1!**\n\n"
+                "I can answer questions about metrics **and run diagnostics**.\n\n"
+                "**Analytics:**\n"
                 "- *How much revenue was prevented?*\n"
                 "- *What is the governance ROI?*\n"
-                "- *What is the health score?*\n"
-                "- *Give me a full summary*\n\n"
+                "- *What is the health score?*\n\n"
+                "**Diagnostics (NEW):**\n"
+                "- *Why did cancellations increase?*\n"
+                "- *Any governance signals right now?*\n"
+                "- *Investigate order ORD-800042*\n"
+                "- *What caused revenue loss today?*\n\n"
                 "Type **help** to see all supported questions."
             )
         })
@@ -1352,6 +1687,10 @@ with tab_chat:
         "What is the AI cancellation rate?",
         "Show recent interventions",
         "What are the top failure reasons?",
+        "Why did cancellations increase?",
+        "Any governance signals right now?",
+        "What caused revenue loss today?",
+        "Investigate order ORD-800001",
     ]
     for i, q in enumerate(quick_qs):
         with quick_cols[i % 4]:
@@ -1371,8 +1710,8 @@ with tab_chat:
 st.markdown("---")
 st.markdown(
     "<p style='text-align:center; color:#94a3b8; font-size:12px;'>"
-    "Navedas Governance Intelligence Platform v2.0 &nbsp;·&nbsp; "
-    "All financials in USD &nbsp;·&nbsp; EST timezone &nbsp;·&nbsp; Production-grade"
+    "Navedas Governance Intelligence Platform v3.0 &nbsp;·&nbsp; "
+    "Signal Engine · Explainability · Diagnostics &nbsp;·&nbsp; All financials in USD"
     "</p>",
     unsafe_allow_html=True
 )
