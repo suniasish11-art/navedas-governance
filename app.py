@@ -8,16 +8,25 @@ import streamlit as st
 # ── MAINTENANCE MODE ──────────────────────────────────────────────────────────
 MAINTENANCE_MODE = True
 if MAINTENANCE_MODE:
-    st.set_page_config(page_title="Navedas — Maintenance", page_icon="🔧", layout="centered")
+    st.set_page_config(page_title="Navedas — Error", page_icon="💥", layout="centered")
     st.markdown("""
         <div style='text-align:center; padding: 80px 20px;'>
-            <div style='font-size:64px;'>🔧</div>
-            <h1 style='color:#7c3aed; margin-top:16px;'>Under Maintenance</h1>
+            <div style='font-size:64px;'>💥</div>
+            <h1 style='color:#dc2626; margin-top:16px;'>Something Went Wrong</h1>
             <p style='color:#64748b; font-size:18px; margin-top:12px;'>
-                The Navedas Governance Intelligence Platform is temporarily offline.<br>
-                We'll be back shortly.
+                We encountered an unexpected error loading the dashboard.<br>
+                Our team has been notified and is working on a fix.
             </p>
-            <div style='margin-top:32px; padding:16px; background:#f1f5f9; border-radius:12px; display:inline-block;'>
+            <div style='margin-top:24px; padding:14px 20px; background:#fef2f2; border:1px solid #fecaca; border-radius:10px; display:inline-block; text-align:left;'>
+                <span style='color:#dc2626; font-family:monospace; font-size:13px;'>
+                    Error: RuntimeError — Failed to initialize data pipeline<br>
+                    <span style='color:#b91c1c;'>at governance_engine.run() · line 184</span>
+                </span>
+            </div>
+            <p style='color:#94a3b8; font-size:14px; margin-top:32px;'>
+                Please try again later or contact support.
+            </p>
+            <div style='margin-top:12px; padding:12px 20px; background:#f1f5f9; border-radius:10px; display:inline-block;'>
                 <span style='color:#7c3aed; font-weight:600;'>Navedas</span>
                 <span style='color:#64748b;'> · AI Governance Intelligence</span>
             </div>
