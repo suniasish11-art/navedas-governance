@@ -6,7 +6,7 @@ Streamlit Cloud Deployable
 import streamlit as st
 
 # ── MAINTENANCE MODE ──────────────────────────────────────────────────────────
-MAINTENANCE_MODE = True
+MAINTENANCE_MODE = False
 if MAINTENANCE_MODE:
     st.set_page_config(page_title="Navedas — Error", page_icon="💥", layout="centered")
     st.markdown("""
@@ -142,7 +142,7 @@ def _check_password() -> bool:
             pwd = st.text_input("Password", type="password", placeholder="Enter access password")
             login = st.form_submit_button("🔐 Access Dashboard", use_container_width=True, type="primary")
         if login:
-            correct = st.secrets.get("APP_PASSWORD", os.environ.get("APP_PASSWORD", "Navedas@2024"))
+            correct = st.secrets.get("APP_PASSWORD", os.environ.get("APP_PASSWORD", "Navedas@2026"))
             if pwd == correct:
                 st.session_state["_authenticated"] = True
                 st.rerun()
