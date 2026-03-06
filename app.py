@@ -4,6 +4,27 @@ Real-Time AI Order Governance Engine — US/Shopify Aligned
 Streamlit Cloud Deployable
 """
 import streamlit as st
+
+# ── MAINTENANCE MODE ──────────────────────────────────────────────────────────
+MAINTENANCE_MODE = True
+if MAINTENANCE_MODE:
+    st.set_page_config(page_title="Navedas — Maintenance", page_icon="🔧", layout="centered")
+    st.markdown("""
+        <div style='text-align:center; padding: 80px 20px;'>
+            <div style='font-size:64px;'>🔧</div>
+            <h1 style='color:#7c3aed; margin-top:16px;'>Under Maintenance</h1>
+            <p style='color:#64748b; font-size:18px; margin-top:12px;'>
+                The Navedas Governance Intelligence Platform is temporarily offline.<br>
+                We'll be back shortly.
+            </p>
+            <div style='margin-top:32px; padding:16px; background:#f1f5f9; border-radius:12px; display:inline-block;'>
+                <span style='color:#7c3aed; font-weight:600;'>Navedas</span>
+                <span style='color:#64748b;'> · AI Governance Intelligence</span>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+    st.stop()
+# ─────────────────────────────────────────────────────────────────────────────
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
